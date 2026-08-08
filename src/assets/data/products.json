@@ -1,0 +1,213 @@
+[
+    {
+      "_id": 1,
+      "name": "Industrial Load Cell - 50kg",
+      "category": "load-cells",
+      "description": "High-precision compression load cell for industrial weighing systems. Capacity: 50kg.",
+      "price": 79.99,
+      "oldPrice": 99.99,
+      "image": "https://picsum.photos/id/124/400/300",
+      "color": "black",
+      "rating": 4.5,
+      "author": "admin"
+    },
+    {
+      "_id": 2,
+      "name": "Digital Weighing Controller",
+      "category": "controllers",
+      "description": "Advanced digital controller for automated weighing systems with LCD display.",
+      "price": 149.99,
+      "oldPrice": 199.99,
+      "image": "https://picsum.photos/id/0/400/300",
+      "color": "red",
+      "rating": 4.0
+    },
+    {
+      "_id": 3,
+      "name": "Stainless Steel Load Cell - 200kg",
+      "category": "load-cells",
+      "description": "Rugged stainless steel load cell for harsh industrial environments. Capacity: 200kg.",
+      "price": 199.99,
+      "image": "https://picsum.photos/id/108/400/300",
+      "color": "gold",
+      "rating": 4.7
+    },
+    {
+      "_id": 4,
+      "name": "Touchscreen Weighing Controller",
+      "category": "controllers",
+      "description": "Intelligent touchscreen controller with data logging and remote monitoring.",
+      "price": 19.99,
+      "image": "https://picsum.photos/id/152/400/300",
+      "color": "red",
+      "rating": 4.2
+    },
+    {
+      "_id": 5,
+      "name": "Platform Weighing Scale - 500kg",
+      "category": "weighing-scales",
+      "description": "Heavy-duty platform scale for industrial and warehouse use. Capacity: 500kg.",
+      "price": 29.99,
+      "oldPrice": 39.99,
+      "image": "https://picsum.photos/id/30/400/300",
+      "color": "blue",
+      "rating": 4.3
+    },
+    {
+      "_id": 6,
+      "name": "Bench Weighing Scale - 100kg",
+      "category": "weighing-scales",
+      "description": "Compact bench scale for industrial counting and weighing applications.",
+      "price": 89.99,
+      "image": "https://picsum.photos/id/20/400/300",
+      "color": "black",
+      "rating": 4.4
+    },
+    {
+      "_id": 7,
+      "name": "Precision Load Cell - 1000kg",
+      "category": "load-cells",
+      "description": "High-capacity precision load cell for industrial silos and tanks. Capacity: 1000kg.",
+      "price": 299.99,
+      "oldPrice": 349.99,
+      "image": "https://picsum.photos/id/15/400/300",
+      "color": "silver",
+      "rating": 4.8
+    },
+    {
+      "_id": 8,
+      "name": "Programmable Weight Controller",
+      "category": "controllers",
+      "description": "Multi-functional weight controller with setpoint control and RS232 output.",
+      "price": 39.99,
+      "image": "https://picsum.photos/id/177/400/300",
+      "color": "beige",
+      "rating": 4.1
+    },
+    {
+      "_id": 9,
+      "name": "Crane Weighing Scale - 5 Ton",
+      "category": "weighing-scales",
+      "description": "Dynamometer crane scale for heavy lifting and industrial weighing.",
+      "price": 49.99,
+      "image": "https://picsum.photos/id/96/400/300",
+      "color": "black",
+      "rating": 4.6
+    },
+    {
+      "_id": 10,
+      "name": "Wireless Load Cell Controller",
+      "category": "controllers",
+      "description": "Wireless controller for remote load cell monitoring and data acquisition.",
+      "price": 59.99,
+      "oldPrice": 79.99,
+      "image": "https://picsum.photos/id/70/400/300",
+      "color": "green",
+      "rating": 3.5
+    },
+    {
+      "_id": 11,
+      "name": "S-Type Load Cell - 500kg",
+      "category": "load-cells",
+      "description": "Tension and compression S-type load cell for hanging scales and hoppers.",
+      "price": 129.99,
+      "oldPrice": 159.99,
+      "image": "https://picsum.photos/id/95/400/300",
+      "color": "silver",
+      "rating": 4.4
+    },
+    {
+      "_id": 12,
+      "name": "Industrial Floor Scale - 2000kg",
+      "category": "weighing-scales",
+      "description": "Heavy-duty floor scale with ramp access for pallet and forklift weighing.",
+      "price": 499.99,
+      "oldPrice": 599.99,
+      "image": "https://picsum.photos/id/48/400/300",
+      "color": "gray",
+      "rating": 4.9
+    },
+    {
+      "_id": 13,
+      "name": "PID Weighing Controller",
+      "category": "controllers",
+      "description": "PID controller with auto-tuning for batching and filling applications.",
+      "price": 189.99,
+      "image": "https://picsum.photos/id/26/400/300",
+      "color": "black",
+      "rating": 4.3
+    },
+    {
+      "_id": 14,
+      "name": "Mini Load Cell - 20kg",
+      "category": "load-cells",
+      "description": "Compact button-style load cell for medical and laboratory scales.",
+      "price": 49.99,
+      "image": "https://picsum.photos/id/112/400/300",
+      "color": "silver",
+      "rating": 4.2
+    },
+    {
+      "_id": 15,
+      "name": "Truck Weighbridge Scale - 50 Ton",
+      "category": "weighing-scales",
+      "description": "Industrial weighbridge for heavy trucks and containers. Capacity: 50 tons.",
+      "price": 2499.99,
+      "oldPrice": 2999.99,
+      "image": "https://picsum.photos/id/111/400/300",
+      "color": "gray",
+      "rating": 4.8
+    },
+    {
+      "_id": 16,
+      "name": "Multi-Channel Load Cell Amplifier",
+      "category": "controllers",
+      "description": "4-channel amplifier for multiple load cell summing and signal conditioning.",
+      "price": 159.99,
+      "image": "https://picsum.photos/id/60/400/300",
+      "color": "black",
+      "rating": 4.5
+    },
+    {
+      "_id": 17,
+      "name": "High-Temperature Load Cell - 300kg",
+      "category": "load-cells",
+      "description": "Load cell rated for high-temperature environments up to 200°C.",
+      "price": 249.99,
+      "oldPrice": 299.99,
+      "image": "https://picsum.photos/id/131/400/300",
+      "color": "gold",
+      "rating": 4.6
+    },
+    {
+      "_id": 18,
+      "name": "Batching Controller with Printer",
+      "category": "controllers",
+      "description": "Automatic batching controller with built-in thermal printer for labels.",
+      "price": 279.99,
+      "image": "https://picsum.photos/id/133/400/300",
+      "color": "white",
+      "rating": 4.4
+    },
+    {
+      "_id": 19,
+      "name": "Waterproof Load Cell - 100kg",
+      "category": "load-cells",
+      "description": "IP68 rated waterproof load cell for outdoor and washdown applications.",
+      "price": 179.99,
+      "oldPrice": 219.99,
+      "image": "https://picsum.photos/id/41/400/300",
+      "color": "blue",
+      "rating": 4.7
+    },
+    {
+      "_id": 20,
+      "name": "Portable Digital Crane Scale - 10 Ton",
+      "category": "weighing-scales",
+      "description": "Portable digital crane scale with remote display and overload alarm.",
+      "price": 349.99,
+      "image": "https://picsum.photos/id/110/400/300",
+      "color": "yellow",
+      "rating": 4.3
+    }
+]
