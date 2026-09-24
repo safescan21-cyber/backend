@@ -4,15 +4,9 @@ const crypto   = require("crypto");
 const { verifyToken, verifyAdmin } = require("../../src/middlewere/authMiddleware");
 const express = require('express');
 const User = require('../users/Usermodel');
-const sendResetEmail = require('../users/email');
-const { OAuth2Client } = require('google-auth-library');
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
-
-// ✅ FIX: was referenced but never defined — threw ReferenceError on
-// every Google login attempt. 'postmessage' is correct for the
-// auth-code flow used from a JS SDK (not a real redirect URL).
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'postmessage';
+const admin = require('../firebaseAdmin'); // ✅ replaces OAuth2Client
+const { sendResetEmail, sendWelcomeEmail } = require('./email');
 
 const router = express.Router();
 
@@ -61,6 +55,9 @@ router.post('/register', async (req, res) => {
       sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000
     });
+    sendWelcomeEmail(email, name).catch(err =>
+      console.error('Welcome email failed:', err)
+    );
 
     res.status(201).send({
       message: "Registered successfully",
@@ -103,30 +100,22 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// ── Google OAuth login/register ────────────────────────────────────────────
+// ── Google login/register (Firebase ID token) ──────────────────────────────
+// Frontend gets this token from Firebase Auth after signInWithRedirect +
+// getRedirectResult, via result.user.getIdToken(). We verify it server-side
+// with the Firebase Admin SDK — no Google OAuth code exchange involved.
 router.post('/google', async (req, res) => {
   try {
-    const { code } = req.body;
-    if (!code) return res.status(400).json({ message: 'Missing authorization code' });
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ message: 'Missing ID token' });
 
-    const { tokens } = await googleClient.getToken({
-      code,
-      redirect_uri: GOOGLE_REDIRECT_URI, // ✅ now defined
-    });
-
-    const idToken = tokens.id_token;
-    if (!idToken) return res.status(400).json({ message: 'No ID token received' });
-
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-    const { email, name, picture } = payload;
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const { email, name, picture } = decoded;
     if (!email) return res.status(400).json({ message: 'No email from Google' });
 
     let user = await User.findOne({ email });
+    let isNewUser = false;
+
     if (!user) {
       const randomPassword = crypto.randomBytes(20).toString('hex');
       user = new User({
@@ -136,6 +125,13 @@ router.post('/google', async (req, res) => {
         profilePicture: picture || undefined,
       });
       await user.save();
+      isNewUser = true;
+    }
+
+    if (isNewUser) {
+      sendWelcomeEmail(email, user.name).catch(err =>
+        console.error('Welcome email failed:', err)
+      );
     }
 
     const token = generateToken(user);

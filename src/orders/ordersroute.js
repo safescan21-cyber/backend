@@ -5,6 +5,7 @@ const Order = require("./ordersmodel");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 
+
 // ─── Email transporter ──────────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",

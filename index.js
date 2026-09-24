@@ -1,30 +1,36 @@
+require("dotenv").config();
 const express = require("express");
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const mongoose = require('mongoose');
-require("dotenv").config();
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 const app = express();
 const port = process.env.PORT || 3000;
 const connectToMongoDB = require("./config/db");
 const cookieParser = require('cookie-parser');
 const productsRoute = require('./src/products/productsRoute')
 const userRoutes = require('./src/users/Userroute');
-const reviewRoutes =require("./src/review/reviewrouter")
-const orderRoutes =require("./src/orders/ordersroute")
+const reviewRoutes = require("./src/review/reviewrouter")
+const orderRoutes = require("./src/orders/ordersroute")
 const statsRoutes = require('../Backend/src/stats/statsRoute')
 const uploadImage = require("./src/utils/uploadImage")
-const bodyParser = require('body-parser')
 const helmet = require('helmet');
 const jobsRoutes = require('./src/jobs/jobsRoute');
-
-
+const visitTracker = require('./src/middlewere/visitTracker');
+const adminAnalytics = require('./src/visitor/analytics'); 
+const heroRoutes = require('./src/Hero/heroRoutes');
+const pressRoutes = require('./src/press/pressRoutes');
+const newsletterRoutes = require('./src/news/newsletterRoutes');
+const contactRoutes = require('./src/contact/contactRoutes');
+// ── Core middleware (each parser registered exactly once) ──────────────────
 app.use(express.json());
-app.use(bodyParser.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors({
     origin: ["http://localhost:5173", "http://localhost:5174"],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // ✅ added PATCH
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
@@ -32,35 +38,37 @@ app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   next();
 });
-// this sets COOP: same-origin by default
-// After all your routes, add this error handler
-app.use((err, req, res, next) => {
-    // Set CORS headers for error responses as well
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
-});
-app.use(express.urlencoded({ extended: true }));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: true}));
-app.use(cookieParser());
 
+
+
+app.use(cookieParser());
+app.use(visitTracker);
+
+// ── Routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', userRoutes);
-app.use ('/api/products', productsRoute)
-app.use('/api/reviews',reviewRoutes)
-app.use('/api/orders',orderRoutes)
+app.use('/api/products', productsRoute)
+app.use('/api/reviews', reviewRoutes)
+app.use('/api/orders', orderRoutes)
 app.use('/api/stats', statsRoutes)
 app.use('/api/jobs', jobsRoutes);
+app.use('/api/admin', adminAnalytics);
+app.use('/api/hero-slides', heroRoutes);
+app.use('/api/press', pressRoutes);
+app.use('/api/newsletter', newsletterRoutes);
+app.use('/api', contactRoutes);
+
 
 
 app.get('/', (req, res) => {
     return res.send("hello world");
 });
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+
+// Cloudinary reads CLOUDINARY_URL from env automatically when the module loads —
+// no explicit cloudinary.config({...}) call needed.
+if (!process.env.CLOUDINARY_URL) {
+  console.warn('⚠️ CLOUDINARY_URL not set — image uploads will fail');
+}
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -82,7 +90,7 @@ const uploadToCloudinary = (buffer) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         resource_type: 'auto',
-        folder: 'products',   // optional: organise in Cloudinary folders
+        folder: 'products',
         overwrite: true,
         invalidate: true,
       },
@@ -116,7 +124,6 @@ app.post('/uploadImages', upload.array('images', MAX_IMAGES), async (req, res) =
       });
     }
 
-    // Upload all files to Cloudinary in parallel
     const uploadPromises = files.map((file) => uploadToCloudinary(file.buffer));
     const urls = await Promise.all(uploadPromises);
 
@@ -130,26 +137,54 @@ app.post('/uploadImages', upload.array('images', MAX_IMAGES), async (req, res) =
   }
 });
 
-
-
-
-// Error handling middleware
+// ── Error handling middleware (must be last) ────────────────────────────
 app.use((err, req, res, next) => {
     console.error('Error:', err.message);
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
     if (!res.headersSent) {
-        return res.status(500).json({ 
-            success: false, 
-            message: "Internal server error" 
+        return res.status(err.status || 500).json({
+            success: false,
+            message: err.message || "Internal server error"
         });
     }
+});
+
+// ── HTTP server + Socket.IO (for live online-user tracking) ────────────
+const httpServer = http.createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    credentials: true,
+  },
+});
+
+// Tracks every open socket connection (tabs/sessions), not unique accounts.
+const onlineSockets = new Set();
+
+io.on('connection', (socket) => {
+  onlineSockets.add(socket.id);
+  io.emit('online-count', onlineSockets.size);
+  console.log(`🟢 Client connected (${onlineSockets.size} online)`);
+
+  socket.on('disconnect', () => {
+    onlineSockets.delete(socket.id);
+    io.emit('online-count', onlineSockets.size);
+    console.log(`🔴 Client disconnected (${onlineSockets.size} online)`);
+  });
+});
+
+app.get('/api/online-count', (req, res) => {
+  res.json({ count: onlineSockets.size });
 });
 
 // Initialize database connection and start server
 const startServer = async () => {
     try {
         await connectToMongoDB();
-        
-        app.listen(port, () => {
+
+        httpServer.listen(port, () => {
             console.log(`🚀 Server is running on port ${port}`);
         });
     } catch (error) {

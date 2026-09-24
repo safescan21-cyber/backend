@@ -6,12 +6,17 @@ dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 async function connectToMongoDB() {
     try {
-        // Check if MONGODB_URI exists in environment
-        if (!process.env.MONGODB_URI) {
-            throw new Error("MONGODB_URI is not defined in .env file");
+        const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
+
+        if (!uri) {
+            throw new Error("MONGODB_URI (or MONGO_URI) is not defined in .env file");
         }
-        
-        await mongoose.connect(process.env.MONGODB_URI);
+
+        if (uri.includes('<') || uri.includes('>')) {
+            throw new Error("MongoDB URI still contains placeholder angle brackets < > — remove them and use your real password directly in .env");
+        }
+
+        await mongoose.connect(uri);
         console.log("✅ MongoDB connection done");
         return "MongoDB connection done";
     } catch (error) {
@@ -20,7 +25,6 @@ async function connectToMongoDB() {
     }
 }
 
-// Debug DNS configuration
 console.log("🔧 DNS Servers configured:", dns.getServers());
 
 module.exports = connectToMongoDB;
