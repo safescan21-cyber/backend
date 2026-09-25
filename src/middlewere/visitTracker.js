@@ -1,6 +1,6 @@
 // src/middlewere/visitTracker.js
 const Visit = require('../visitor/Visitmodel');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 const getVisitorId = (req, res) => {
   // Ensure req.cookies exists
@@ -9,7 +9,7 @@ const getVisitorId = (req, res) => {
   }
   let visitorId = req.cookies.visitorId;
   if (!visitorId) {
-    visitorId = uuidv4();
+    visitorId = crypto.randomUUID();
     if (res && typeof res.cookie === 'function') {
       res.cookie('visitorId', visitorId, {
         maxAge: 365 * 24 * 60 * 60 * 1000,
