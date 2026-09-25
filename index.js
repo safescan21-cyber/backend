@@ -24,11 +24,20 @@ const heroRoutes = require('./src/Hero/heroRoutes');
 const pressRoutes = require('./src/press/pressRoutes');
 const newsletterRoutes = require('./src/news/newsletterRoutes');
 const contactRoutes = require('./src/contact/contactRoutes');
+
+// ── Allowed frontend origins ────────────────────────────────────────────
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://frontend-wzvf-git-main-safescan21-cyber.vercel.app",
+  "https://frontend-safescan21-cyber.vercel.app",
+];
+
 // ── Core middleware (each parser registered exactly once) ──────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -155,7 +164,7 @@ const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: allowedOrigins,
     credentials: true,
   },
 });
