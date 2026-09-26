@@ -5,7 +5,7 @@ const { verifyToken, verifyAdmin } = require("../../src/middlewere/authMiddlewar
 const express = require('express');
 const User = require('../users/Usermodel');
 
-const admin = require('../firebaseAdmin'); // ✅ replaces OAuth2Client
+; // ✅ replaces OAuth2Client
 const { sendResetEmail, sendWelcomeEmail } = require('./email');
 
 const router = express.Router();
