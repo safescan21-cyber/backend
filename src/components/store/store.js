@@ -31,7 +31,7 @@ export const store = configureStore({
       // ─── ADD JOBS API MIDDLEWARE ──
       jobsApi.middleware,
     ),
-  devTools: process.env.NODE_ENV !== 'production',
+  devTools: import.meta.env.DEV,
 });
 
 export default store;
