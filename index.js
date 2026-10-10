@@ -30,6 +30,7 @@ const heroRoutes = require("./src/Hero/heroRoutes");
 const pressRoutes = require("./src/press/pressRoutes");
 const newsletterRoutes = require("./src/news/newsletterRoutes");
 const contactRoutes = require("./src/contact/contactRoutes");
+const uploadRoute = require('./src/utils/uploadroute');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -110,6 +111,8 @@ app.use("/api/hero-slides", heroRoutes);
 app.use("/api/press", pressRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api", contactRoutes);
+app.use("/api/upload", uploadRoute);
+
 
 app.get("/", (req, res) => {
   return res.send("hello world");
@@ -120,82 +123,7 @@ app.get("/", (req, res) => {
 // Supports either CLOUDINARY_URL or the three separate variables
 // (CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET),
 // which ./src/utils/uploadImage.js uses to configure the SDK.
-const hasCloudinaryConfig =
-  process.env.CLOUDINARY_URL ||
-  (process.env.CLOUDINARY_CLOUD_NAME &&
-    process.env.CLOUDINARY_API_KEY &&
-    process.env.CLOUDINARY_API_SECRET);
 
-if (!hasCloudinaryConfig) {
-  console.warn("⚠️ Cloudinary credentials not set — image uploads will fail");
-}
-
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5 MB per file
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only image files are allowed"), false);
-    }
-  },
-});
-
-// ---------- Cloudinary upload helper (from buffer) ----------
-const uploadToCloudinary = (buffer) => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        resource_type: "auto",
-        folder: "products",
-        overwrite: true,
-        invalidate: true,
-      },
-      (error, result) => {
-        if (error) return reject(error);
-        if (!result || !result.secure_url) {
-          return reject(new Error("Cloudinary upload failed: no URL returned"));
-        }
-        resolve(result.secure_url);
-      }
-    );
-    uploadStream.end(buffer);
-  });
-};
-
-// ---------- Route: upload multiple images ----------
-const MAX_IMAGES = 5;
-
-app.post("/uploadImages", upload.array("images", MAX_IMAGES), async (req, res) => {
-  try {
-    const files = req.files;
-
-    if (!files || files.length === 0) {
-      return res.status(400).json({ success: false, message: "No images provided" });
-    }
-
-    if (files.length > MAX_IMAGES) {
-      return res.status(400).json({
-        success: false,
-        message: `You can upload a maximum of ${MAX_IMAGES} images`,
-      });
-    }
-
-    const urls = await Promise.all(files.map((file) => uploadToCloudinary(file.buffer)));
-
-    res.status(200).json({ success: true, urls });
-  } catch (error) {
-    console.error("Upload error:", error.message);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Image upload failed",
-    });
-  }
-});
 
 // ── HTTP server + Socket.IO (for live online-user tracking) ────────────
 const httpServer = http.createServer(app);
