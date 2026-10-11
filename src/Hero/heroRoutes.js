@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
-const HeroSlide = require('./HeroSlide'); // adjust path
+const HeroSlide = require('./HeroSlide'); // adjust path if your model file is elsewhere
 const { verifyToken, verifyAdmin } = require('../middlewere/authMiddleware');
 
 // ─── Multer configuration (memory storage — no local disk writes) ─────
@@ -71,28 +71,6 @@ router.post('/', verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-// UPDATE a slide
-router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
-  try {
-    const slide = await HeroSlide.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!slide) return res.status(404).json({ message: 'Slide not found' });
-    res.json(slide);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// DELETE a slide
-router.delete('/:id', verifyToken, verifyAdmin, async (req, res) => {
-  try {
-    const slide = await HeroSlide.findByIdAndDelete(req.params.id);
-    if (!slide) return res.status(404).json({ message: 'Slide not found' });
-    res.json({ message: 'Slide deleted' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
 // BULK UPDATE (reorder)
 router.put('/bulk', verifyToken, verifyAdmin, async (req, res) => {
   try {
@@ -114,6 +92,28 @@ router.put('/bulk', verifyToken, verifyAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Bulk update error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// UPDATE a slide
+router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const slide = await HeroSlide.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!slide) return res.status(404).json({ message: 'Slide not found' });
+    res.json(slide);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// DELETE a slide
+router.delete('/:id', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const slide = await HeroSlide.findByIdAndDelete(req.params.id);
+    if (!slide) return res.status(404).json({ message: 'Slide not found' });
+    res.json({ message: 'Slide deleted' });
+  } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
