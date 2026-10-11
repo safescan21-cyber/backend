@@ -90,14 +90,16 @@ module.exports = (file, options = {}, isVideo = false) => {
     const done = (error, result) => handleResult(error, result, resolve, reject, isVideo);
 
     if (Buffer.isBuffer(file)) {
-      // Videos go in 6 MB chunks so large files don't fail
+      // Videos go in 6 MB chunks so large files don't fail.
+      // (v2 API: upload_chunked_stream(options, callback))
       const stream = isVideo
-        ? cloudinary.uploader.upload_large_stream(null, { ...uploadOptions, chunk_size: 6000000 }, done)
+        ? cloudinary.uploader.upload_chunked_stream({ ...uploadOptions, chunk_size: 6000000 }, done)
         : cloudinary.uploader.upload_stream(uploadOptions, done);
       return stream.end(file);
     }
 
     if (isVideo) {
+      // file path / URL: upload_large(path, options, callback)
       return cloudinary.uploader.upload_large(file, { ...uploadOptions, chunk_size: 6000000 }, done);
     }
     return cloudinary.uploader.upload(file, uploadOptions, done);
