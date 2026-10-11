@@ -104,6 +104,7 @@ router.post("/register", async (req, res) => {
 
     res.status(201).send({
       message: "Registered successfully",
+      token, // also returned in the body so the frontend can send it as a Bearer header
       user: toClientUser(newUser),
     });
   } catch (error) {
@@ -139,6 +140,7 @@ router.post("/login", async (req, res) => {
 
     res.status(200).send({
       message: "Logged in successfully",
+      token, // also returned in the body so the frontend can send it as a Bearer header
       user: toClientUser(user),
     });
   } catch (error) {
@@ -187,6 +189,7 @@ router.post("/google", async (req, res) => {
 
     res.status(200).json({
       message: "Logged in with Google successfully",
+      token, // also returned in the body so the frontend can send it as a Bearer header
       user: toClientUser(user),
     });
   } catch (error) {

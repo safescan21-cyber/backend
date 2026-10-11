@@ -7,8 +7,6 @@ if (process.env.CUSTOM_DNS === "true") {
 }
 
 const express = require("express");
-const multer = require("multer");
-const cloudinary = require("cloudinary").v2;
 const mongoose = require("mongoose");
 const cors = require("cors");
 const http = require("http");
@@ -22,7 +20,7 @@ const userRoutes = require("./src/users/userroute");
 const reviewRoutes = require("./src/review/reviewrouter");
 const orderRoutes = require("./src/orders/ordersroute");
 const statsRoutes = require("./src/stats/statsRoute");
-const uploadImage = require("./src/utils/uploadImage");
+const uploadRoutes = require("./src/utils/uploadroute");
 const jobsRoutes = require("./src/jobs/jobsRoute");
 const visitTracker = require("./src/middlewere/visitTracker");
 const adminAnalytics = require("./src/visitor/analytics");
@@ -30,7 +28,6 @@ const heroRoutes = require("./src/Hero/heroRoutes");
 const pressRoutes = require("./src/press/pressRoutes");
 const newsletterRoutes = require("./src/news/newsletterRoutes");
 const contactRoutes = require("./src/contact/contactRoutes");
-const uploadRoute = require('./src/utils/uploadroute');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -48,6 +45,9 @@ const defaultOrigins = [
   "http://localhost:5174",
   "https://frontend-wzvf-git-main-safescan21-cyber.vercel.app",
   "https://frontend-safescan21-cyber.vercel.app",
+  "https://frontend-theta-fawn-75.vercel.app",
+  "https://foodpharmamachinery.com",
+  "https://www.foodpharmamachinery.com",
 ];
 
 const envOrigins = (process.env.ALLOWED_ORIGINS || "")
@@ -110,20 +110,15 @@ app.use("/api/admin", adminAnalytics);
 app.use("/api/hero-slides", heroRoutes);
 app.use("/api/press", pressRoutes);
 app.use("/api/newsletter", newsletterRoutes);
+// Image/video uploads (login required). Also mounted at "/" so older frontend
+// calls to /uploadImages keep working until they are updated.
+app.use("/api", uploadRoutes);
+app.use("/", uploadRoutes);
 app.use("/api", contactRoutes);
-app.use("/api/upload", uploadRoute);
-
 
 app.get("/", (req, res) => {
   return res.send("hello world");
 });
-
-// ── Cloudinary ──────────────────────────────────────────────────────────
-// Cloudinary is configured from env vars (see below).
-// Supports either CLOUDINARY_URL or the three separate variables
-// (CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET),
-// which ./src/utils/uploadImage.js uses to configure the SDK.
-
 
 // ── HTTP server + Socket.IO (for live online-user tracking) ────────────
 const httpServer = http.createServer(app);
