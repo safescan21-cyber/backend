@@ -5,6 +5,16 @@ const express = require("express");
 const { verifyToken, verifyAdmin } = require("../../src/middlewere/authMiddleware");
 const User = require("../users/Usermodel");
 const { sendResetEmail, sendWelcomeEmail } = require("./email");
+const {
+  OtpCode,
+  OTP_TTL_MS,
+  OTP_RESEND_MS,
+  OTP_MAX_ATTEMPTS,
+  generateOtp,
+  hashOtp,
+  safeEqual,
+  sendOtpEmail,
+} = require("./otp");
 
 // ── Firebase Admin (used only by Google login) ──────────────────────────────
 // Loaded defensively so a missing package or key never crashes the whole API.
@@ -195,6 +205,128 @@ router.post("/google", async (req, res) => {
   } catch (error) {
     console.error("Google auth error:", error.message || error);
     res.status(401).json({ message: "Google authentication failed" });
+  }
+});
+
+// ── Login with email OTP ──────────────────────────────────────────────────────
+// 1) POST /otp/request { email }       → emails a 6-digit code (valid 10 minutes)
+// 2) POST /otp/verify  { email, otp }  → logs in (creates the account if new)
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// light per-IP limit on code requests: 10 per 15 minutes
+const otpHits = new Map();
+const otpIpLimited = (ip) => {
+  const now = Date.now();
+  const list = (otpHits.get(ip) || []).filter((t) => now - t < 15 * 60 * 1000);
+  list.push(now);
+  otpHits.set(ip, list);
+  return list.length > 10;
+};
+
+router.post("/otp/request", async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    if (!email || !EMAIL_RE.test(email)) {
+      return res.status(400).json({ message: "Please enter a valid email address." });
+    }
+    if (otpIpLimited(req.ip)) {
+      return res.status(429).json({ message: "Too many requests. Please try again later." });
+    }
+
+    const existing = await OtpCode.findOne({ email });
+    if (existing) {
+      const wait = OTP_RESEND_MS - (Date.now() - new Date(existing.lastSentAt).getTime());
+      if (wait > 0) {
+        return res.status(429).json({
+          message: `Please wait ${Math.ceil(wait / 1000)} seconds before asking for a new code.`,
+          retryAfter: Math.ceil(wait / 1000),
+        });
+      }
+    }
+
+    const code = generateOtp();
+    await OtpCode.findOneAndUpdate(
+      { email },
+      {
+        email,
+        codeHash: hashOtp(email, code),
+        attempts: 0,
+        lastSentAt: new Date(),
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    try {
+      await sendOtpEmail(email, code);
+    } catch (mailErr) {
+      console.error("OTP email failed:", mailErr.message || mailErr);
+      await OtpCode.deleteOne({ email }).catch(() => {});
+      return res.status(500).json({ message: "We could not send the code right now. Please try again later." });
+    }
+
+    console.log(`[otp] code sent to ${maskEmail(email)}`);
+    res.status(200).json({ message: "A 6-digit code has been sent to your email.", expiresInSeconds: OTP_TTL_MS / 1000 });
+  } catch (error) {
+    console.error("OTP request error:", error.message || error);
+    res.status(500).json({ message: "Something went wrong. Please try again." });
+  }
+});
+
+router.post("/otp/verify", async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const otp = String(req.body.otp || "").replace(/\s+/g, "");
+    if (!email || !EMAIL_RE.test(email) || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ message: "Enter the 6-digit code from your email." });
+    }
+
+    const record = await OtpCode.findOne({ email });
+    if (!record || new Date(record.expiresAt).getTime() < Date.now()) {
+      if (record) await OtpCode.deleteOne({ email }).catch(() => {});
+      return res.status(400).json({ message: "This code has expired. Please request a new one." });
+    }
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      await OtpCode.deleteOne({ email }).catch(() => {});
+      return res.status(429).json({ message: "Too many wrong attempts. Please request a new code." });
+    }
+
+    if (!safeEqual(record.codeHash, hashOtp(email, otp))) {
+      record.attempts += 1;
+      await record.save();
+      const left = OTP_MAX_ATTEMPTS - record.attempts;
+      return res.status(400).json({
+        message: left > 0 ? `Incorrect code. ${left} attempt${left === 1 ? "" : "s"} left.` : "Too many wrong attempts. Please request a new code.",
+      });
+    }
+
+    // Correct code: use it once only
+    await OtpCode.deleteOne({ email });
+
+    let user = await findByEmail(email);
+    let isNewUser = false;
+    if (!user) {
+      user = new User({
+        name: email.split("@")[0],
+        email,
+        password: crypto.randomBytes(20).toString("hex"),
+      });
+      await user.save();
+      isNewUser = true;
+      sendWelcomeSafely(email, user.name);
+    }
+
+    const token = generateToken(user);
+    res.cookie("token", token, cookieOptions);
+    res.status(200).json({
+      message: "Logged in successfully",
+      token,
+      isNewUser,
+      user: toClientUser(user),
+    });
+  } catch (error) {
+    console.error("OTP verify error:", error.message || error);
+    res.status(500).json({ message: "Something went wrong. Please try again." });
   }
 });
 
