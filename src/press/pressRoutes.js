@@ -26,8 +26,6 @@ const uploadToCloudinary = (fileBuffer, options = {}, isVideo = false) => {
       overwrite: true,
       invalidate: true,
       resource_type: 'auto',
-      quality: 'auto',
-      fetch_format: 'auto',
     };
     let uploadOptions = { ...baseOptions, ...options };
     if (isVideo) {
@@ -58,10 +56,18 @@ const uploadToCloudinary = (fileBuffer, options = {}, isVideo = false) => {
   });
 };
 
+// Work out the media type stored in the database
+const mediaTypeOf = (file) => {
+  if (file.mimetype.startsWith('video/')) return 'video';
+  if (file.mimetype.startsWith('image/')) return 'image';
+  return 'document';
+};
+
 // Delete helper (for updates & deletions)
-const deleteFromCloudinary = (publicId) => {
+const deleteFromCloudinary = (publicId, type = 'image') => {
+  const resource_type = type === 'video' ? 'video' : type === 'document' ? 'raw' : 'image';
   return new Promise((resolve, reject) => {
-    cloudinary.uploader.destroy(publicId, (error, result) => {
+    cloudinary.uploader.destroy(publicId, { resource_type }, (error, result) => {
       if (error) reject(error);
       else resolve(result);
     });
@@ -79,7 +85,7 @@ const authAdmin = async (req, res, next) => {
     const token = headerToken || cookieToken;
 
     if (!token) throw new Error();
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
     const user = await User.findById(decoded.id).select('-password');
     if (!user || user.role !== 'admin') {
       return res.status(403).json({ message: 'Admin access required' });
@@ -102,7 +108,7 @@ const optionalAdmin = async (req, res, next) => {
     const token = headerToken || cookieToken;
 
     if (!token) return next();
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key');
     const user = await User.findById(decoded.id).select('-password');
     if (user && user.role === 'admin') {
       req.user = user;
@@ -122,7 +128,18 @@ const fileFilter = (req, file, cb) => {
   if (ext && mime) return cb(null, true);
   cb(new Error('Only images, videos, and documents are allowed'));
 };
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 }, fileFilter });
+const multerUpload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 }, fileFilter });
+const upload = {
+  array: (field, max) => (req, res, next) =>
+    multerUpload.array(field, max)(req, res, (err) => {
+      if (!err) return next();
+      const message =
+        err.code === 'LIMIT_FILE_SIZE' ? 'Each file must be 50 MB or smaller.'
+        : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? `You can upload up to ${max} files.`
+        : err.message || 'Upload failed.';
+      return res.status(400).json({ success: false, message });
+    }),
+};
 
 // ─── CONTROLLERS (embedded) ─────────────────────────────────────
 
@@ -131,6 +148,9 @@ router.post('/', authAdmin, upload.array('media', 10), async (req, res) => {
   try {
     const { title, content, summary, publishedDate, isActive } = req.body;
     const files = req.files || [];
+    if (!title || !String(title).trim() || !content || !String(content).trim()) {
+      return res.status(400).json({ success: false, message: 'Title and content are required.' });
+    }
 
     const mediaItems = [];
     for (const file of files) {
@@ -139,7 +159,7 @@ router.post('/', authAdmin, upload.array('media', 10), async (req, res) => {
       mediaItems.push({
         url: result.secure_url,
         public_id: result.public_id,
-        type: isVideo ? 'video' : 'image',
+        type: mediaTypeOf(file),
         caption: file.originalname,
         thumbnail: result.thumbnail_url,
       });
@@ -168,7 +188,9 @@ router.post('/', authAdmin, upload.array('media', 10), async (req, res) => {
 // pass active=false (or omit it) to see everything.
 router.get('/', optionalAdmin, async (req, res) => {
   try {
-    const { active, limit = 10, page = 1 } = req.query;
+    const { active } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 100);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
     const filter = {};
 
     if (req.user) {
@@ -180,15 +202,15 @@ router.get('/', optionalAdmin, async (req, res) => {
     const presses = await PressRelease.find(filter)
       .populate('author', 'name email')
       .sort({ publishedDate: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .limit(limit)
+      .skip((page - 1) * limit);
 
     const total = await PressRelease.countDocuments(filter);
 
     res.json({
       success: true,
       data: presses,
-      pagination: { page: parseInt(page), limit: parseInt(limit), total },
+      pagination: { page, limit, total },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -200,6 +222,7 @@ router.get('/', optionalAdmin, async (req, res) => {
 // admins can view any, including inactive ones (for editing/preview).
 router.get('/:id', optionalAdmin, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: 'Not found' });
     const press = await PressRelease.findById(req.params.id).populate('author', 'name email');
     if (!press) return res.status(404).json({ success: false, message: 'Not found' });
 
@@ -216,6 +239,7 @@ router.get('/:id', optionalAdmin, async (req, res) => {
 // UPDATE (admin only, replace media if new files provided)
 router.put('/:id', authAdmin, upload.array('media', 10), async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: 'Not found' });
     const { title, content, summary, publishedDate, isActive } = req.body;
     const press = await PressRelease.findById(req.params.id);
     if (!press) return res.status(404).json({ success: false, message: 'Not found' });
@@ -232,7 +256,7 @@ router.put('/:id', authAdmin, upload.array('media', 10), async (req, res) => {
     if (files && files.length) {
       // Delete old media from Cloudinary
       for (const old of press.media) {
-        await deleteFromCloudinary(old.public_id).catch(console.error);
+        await deleteFromCloudinary(old.public_id, old.type).catch(console.error);
       }
       // Upload new media
       const newMedia = [];
@@ -242,7 +266,7 @@ router.put('/:id', authAdmin, upload.array('media', 10), async (req, res) => {
         newMedia.push({
           url: result.secure_url,
           public_id: result.public_id,
-          type: isVideo ? 'video' : 'image',
+          type: mediaTypeOf(file),
           caption: file.originalname,
           thumbnail: result.thumbnail_url,
         });
@@ -260,12 +284,13 @@ router.put('/:id', authAdmin, upload.array('media', 10), async (req, res) => {
 // DELETE (admin only)
 router.delete('/:id', authAdmin, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ success: false, message: 'Not found' });
     const press = await PressRelease.findById(req.params.id);
     if (!press) return res.status(404).json({ success: false, message: 'Not found' });
 
     // Delete all associated media from Cloudinary
     for (const media of press.media) {
-      await deleteFromCloudinary(media.public_id).catch(console.error);
+      await deleteFromCloudinary(media.public_id, media.type).catch(console.error);
     }
 
     await press.deleteOne();
