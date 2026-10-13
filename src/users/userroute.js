@@ -69,7 +69,11 @@ const cookieOptions = {
 };
 
 // Case-insensitive email handling (works with older mixed-case records too)
-const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+// Accepts "a@b.com" and also { email: "a@b.com" } (older frontend builds send the nested shape)
+const normalizeEmail = (value) => {
+  if (value && typeof value === "object") value = value.email;
+  return String(value || "").trim().toLowerCase();
+};
 const findByEmail = (email) =>
   User.findOne({ email }).collation({ locale: "en", strength: 2 });
 
