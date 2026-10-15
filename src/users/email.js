@@ -234,7 +234,7 @@ const sendOrderConfirmationEmail = (order) => {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">
             <tr><td style="color:#777;">Subtotal</td><td align="right">${inr(order.subtotal)}</td></tr>
             <tr><td style="color:#777;">Shipping</td><td align="right">${inr(order.shippingCost)}</td></tr>
-            ${order.discount ? `<tr><td style="color:#777;">Discount</td><td align="right">−${inr(order.discount)}</td></tr>` : ''}
+            ${order.discount ? `<tr><td style="color:#2e7d32;">Discount${order.couponCode ? ` (${esc(order.couponCode)})` : ''}</td><td align="right" style="color:#2e7d32;">−${inr(order.discount)}</td></tr>` : ''}
             <tr><td style="padding-top:8px;font-size:16px;"><strong>Total</strong></td><td align="right" style="padding-top:8px;font-size:16px;"><strong>${inr(order.totalAmount)}</strong></td></tr>
           </table>
 

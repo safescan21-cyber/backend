@@ -4,48 +4,49 @@ const router  = express.Router();
 const Stripe  = require("stripe");
 const Order   = require("../orders/ordersmodel"); // adjust path if needed
 const { sendOrderStatusEmail } = require("../users/email");
+const { priceOrder } = require("../offers/coupon");
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/payment/create-payment-intent
 // ─────────────────────────────────────────────────────────────
-// Called by the frontend as soon as the user selects Card/UPI.
-// Returns a clientSecret which Stripe Elements uses to render
-// the payment form and confirm the charge — card details never
-// touch your server.
+// Called by the checkout when the customer chooses card payment.
+// The amount is worked out HERE from the cart items and coupon
+// (same calculation used when the order is saved), so it can't be
+// changed in the browser. Card details never touch this server.
 // ─────────────────────────────────────────────────────────────
-router.post("/create-payment-intent", async (req, res) => {
+router.post("/create-payment-intent", express.json(), async (req, res) => {
   try {
-    const {
-      amount,
-      currency = "inr",
-      orderId  = "",
-      customerEmail = "",
-    } = req.body;
+    const { items, couponCode, currency = "inr", customerEmail = "" } = req.body || {};
 
-    if (!amount || amount <= 0) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Your cart is empty" });
+    }
+
+    const pricing = await priceOrder(items, couponCode);
+    if (!(pricing.totalAmount > 0)) {
       return res.status(400).json({ message: "A valid amount is required" });
     }
 
-    // Stripe requires the amount in the smallest currency unit:
-    // INR → paise  (₹500 = 50000 paise)
-    // USD → cents  ($5.00 = 500 cents)
-    const amountInSmallestUnit = Math.round(amount * 100);
-
+    // Stripe wants the smallest currency unit: ₹500 → 50000 paise
     const paymentIntent = await stripe.paymentIntents.create({
-      amount:   amountInSmallestUnit,
+      amount: Math.round(pricing.totalAmount * 100),
       currency,
       automatic_payment_methods: { enabled: true },
       metadata: {
-        orderId,        // stored on Stripe so the webhook can find the order
-        customerEmail,
+        customerEmail: String(customerEmail).slice(0, 200),
+        couponCode: pricing.couponCode,
+        subtotal: String(pricing.subtotal),
+        discount: String(pricing.discount),
       },
     });
 
     res.status(200).json({
       clientSecret:    paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
+      ...pricing,
+      coupon: undefined,
     });
   } catch (error) {
     console.error("Error creating payment intent:", error);

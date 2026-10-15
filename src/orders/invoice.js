@@ -100,7 +100,7 @@ const generateInvoicePdf = (order) =>
     };
     totalRow("Subtotal", money(order.subtotal));
     totalRow("Shipping", money(order.shippingCost));
-    if (order.discount) totalRow("Discount", `- ${money(order.discount)}`);
+    if (order.discount) totalRow(order.couponCode ? `Discount (${order.couponCode})` : "Discount", `- ${money(order.discount)}`);
     totalRow("Total", money(order.totalAmount), true);
 
     // ── Footer ──

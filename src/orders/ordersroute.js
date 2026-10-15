@@ -29,6 +29,7 @@ const canSeeOrder = async (req, order) => {
   return Boolean(email) && [order.email, order.customerInfo?.email].some((e) => e?.toLowerCase() === email);
 };
 const { sendInvoiceWhatsApp, sendDispatchWhatsApp } = require("../utils/whatsapp");
+const { priceOrder } = require("../offers/coupon");
 
 // Records the WhatsApp result on the order; never throws.
 const recordWhatsApp = (orderId, sentField, promise) =>
@@ -162,13 +163,8 @@ router.post("/", attachUserIfPresent, async (req, res) => {
       shippingAddress,
       items,
       paymentMethod,
-      paymentStatus,
       paymentIntentId,
-      orderStatus,
-      subtotal,
-      shippingCost,
-      discount,
-      totalAmount,
+      // Prices, payment status and order status are decided on the server
       orderDate,
       estimatedDelivery,
       email: topLevelEmail,
@@ -197,6 +193,31 @@ router.post("/", attachUserIfPresent, async (req, res) => {
 
     const email = (topLevelEmail || customerInfo.email || "").trim().toLowerCase();
 
+    // Totals and coupon are recalculated here — the browser's numbers are ignored
+    const pricing = await priceOrder(items, req.body.couponCode);
+    if (req.body.couponCode && !pricing.couponCode) {
+      return res.status(400).json({ message: pricing.coupon?.message || "This coupon code can't be used." });
+    }
+
+    // "stripe" was sent by older checkout code; the order model calls it "card"
+    const method = paymentMethod === "stripe" ? "card" : paymentMethod || "cod";
+
+    // Card orders: ask Stripe whether the payment really succeeded, and for how much
+    let verifiedPaymentStatus = "pending";
+    if (method === "card") {
+      if (!paymentIntentId) {
+        return res.status(400).json({ message: "Card payment is missing. Please pay again." });
+      }
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId).catch(() => null);
+      if (!pi || pi.status !== "succeeded") {
+        return res.status(400).json({ message: "We couldn't confirm your card payment. Please contact us if you were charged." });
+      }
+      if (pi.amount !== Math.round(pricing.totalAmount * 100)) {
+        console.warn(`⚠️ Payment amount mismatch for ${orderId}: paid ${pi.amount / 100}, order total ${pricing.totalAmount}`);
+      }
+      verifiedPaymentStatus = "paid";
+    }
+
     const order = new Order({
       orderId,
       userId: req.user?.id || req.user?._id || null,
@@ -204,14 +225,15 @@ router.post("/", attachUserIfPresent, async (req, res) => {
       customerInfo: { ...customerInfo, email },
       shippingAddress,
       items,
-      paymentMethod: paymentMethod || "cod",
-      paymentStatus: paymentStatus || "pending",
+      paymentMethod: method,
+      paymentStatus: verifiedPaymentStatus,
       paymentIntentId: paymentIntentId || null,
-      orderStatus: orderStatus || "confirmed",
-      subtotal: subtotal || totalAmount,
-      shippingCost: shippingCost || 0,
-      discount: discount || 0,
-      totalAmount,
+      orderStatus: "confirmed",
+      subtotal: pricing.subtotal,
+      shippingCost: pricing.shippingCost,
+      discount: pricing.discount,
+      couponCode: pricing.couponCode,
+      totalAmount: pricing.totalAmount,
       orderDate: orderDate ? new Date(orderDate) : new Date(),
       estimatedDelivery: estimatedDelivery ? new Date(estimatedDelivery) : null,
     });

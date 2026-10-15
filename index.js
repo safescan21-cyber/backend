@@ -19,6 +19,7 @@ const productsRoute = require("./src/products/productsRoute");
 const userRoutes = require("./src/users/userroute");
 const reviewRoutes = require("./src/review/reviewrouter");
 const orderRoutes = require("./src/orders/ordersroute");
+const paymentRoutes = require("./src/orders/paymentroute");
 const statsRoutes = require("./src/stats/statsRoute");
 const uploadRoutes = require("./src/utils/uploadroute");
 const jobsRoutes = require("./src/jobs/jobsRoute");
@@ -27,6 +28,8 @@ const adminAnalytics = require("./src/visitor/analytics");
 const heroRoutes = require("./src/Hero/heroRoutes");
 const pressRoutes = require("./src/press/pressRoutes");
 const newsletterRoutes = require("./src/news/newsletterRoutes");
+const insightsRoutes = require("./src/insights/insightsRoutes");
+const offerRoutes = require("./src/offers/offerRoutes");
 const contactRoutes = require("./src/contact/contactRoutes");
 const quoteRoutes = require("./src/users/Quoteroutes");
 
@@ -80,6 +83,10 @@ app.use(
 );
 app.use(cors(corsOptions));
 
+// Stripe payments: mounted before express.json because the webhook needs the raw body
+// (create-payment-intent parses its own JSON)
+app.use("/api/payment", paymentRoutes);
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -111,6 +118,8 @@ app.use("/api/admin", adminAnalytics);
 app.use("/api/hero-slides", heroRoutes);
 app.use("/api/press", pressRoutes);
 app.use("/api/newsletter", newsletterRoutes);
+app.use("/api/insights", insightsRoutes);
+app.use("/api/offers", offerRoutes);
 // Image/video uploads (login required). Also mounted at "/" so older frontend
 // calls to /uploadImages keep working until they are updated.
 app.use("/api", uploadRoutes);
