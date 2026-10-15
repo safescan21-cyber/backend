@@ -21,7 +21,7 @@ const getVisitorId = (req, res) => {
 };
 
 const visitTracker = async (req, res, next) => {
-  const skipPaths = ['/api/admin', '/api/auth', '/static', '/favicon.ico', '/_next'];
+  const skipPaths = ['/api/admin', '/api/auth', '/api/insights', '/static', '/favicon.ico', '/_next'];
   if (skipPaths.some(path => req.path.startsWith(path))) {
     return next();
   }
