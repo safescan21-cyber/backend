@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../users/Usermodel'); // assume User model exists
 const PressRelease = require('./PressRelease');
 require('dotenv').config();
+const { pingIndexNow } = require('../utils/indexnow');
 
 // ─── Cloudinary configuration ───────────────────────────────────
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -176,6 +177,7 @@ router.post('/', authAdmin, upload.array('media', 10), async (req, res) => {
     });
 
     await newPress.save();
+    if (newPress.isActive) pingIndexNow([`/press/${newPress._id}`, '/press']);
     res.status(201).json({ success: true, data: newPress });
   } catch (error) {
     console.error(error);
@@ -275,6 +277,7 @@ router.put('/:id', authAdmin, upload.array('media', 10), async (req, res) => {
     }
 
     await press.save();
+    if (press.isActive) pingIndexNow([`/press/${press._id}`]);
     res.json({ success: true, data: press });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

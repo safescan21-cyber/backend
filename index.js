@@ -30,6 +30,7 @@ const pressRoutes = require("./src/press/pressRoutes");
 const newsletterRoutes = require("./src/news/newsletterRoutes");
 const insightsRoutes = require("./src/insights/insightsRoutes");
 const offerRoutes = require("./src/offers/offerRoutes");
+const seoRoutes = require("./src/seo/seoRoutes");
 const contactRoutes = require("./src/contact/contactRoutes");
 const quoteRoutes = require("./src/users/Quoteroutes");
 
@@ -120,6 +121,7 @@ app.use("/api/press", pressRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use("/api/offers", offerRoutes);
+app.use("/", seoRoutes); // /sitemap-content.xml
 // Image/video uploads (login required). Also mounted at "/" so older frontend
 // calls to /uploadImages keep working until they are updated.
 app.use("/api", uploadRoutes);

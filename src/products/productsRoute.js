@@ -4,6 +4,7 @@ const router = express.Router();
 const Products = require('../products/productsmodel');
 const { verifyToken, verifyAdmin } = require('../middlewere/authMiddleware');
 const Reviews = require('../review/reviewsmodel');
+const { pingIndexNow } = require("../utils/indexnow");
 
 // ============ CREATE PRODUCT (ADMIN ONLY) ============
 router.post("/create-product", verifyToken, verifyAdmin, async (req, res) => {
@@ -19,6 +20,7 @@ router.post("/create-product", verifyToken, verifyAdmin, async (req, res) => {
       await savedproduct.save();
     }
 
+    pingIndexNow([`/shop/${savedproduct._id}`, '/shop']);
     res.status(201).send(savedproduct);
   } catch (error) {
     console.error("Error creating new product", error);
@@ -106,6 +108,7 @@ router.patch("/update-product/:id", verifyToken, verifyAdmin, async (req, res) =
       return res.status(404).send({ message: "Product not found" });
     }
 
+    pingIndexNow([`/shop/${updatedProduct._id}`]);
     res.status(200).send({
       message: "Product updated successfully",
       product: updatedProduct,
