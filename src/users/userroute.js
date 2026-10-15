@@ -18,19 +18,58 @@ const {
 
 // ── Firebase Admin (used only by Google login) ──────────────────────────────
 // Loaded defensively so a missing package or key never crashes the whole API.
+// Verifying a Google ID token only needs the project ID (Firebase checks it
+// against Google's public keys), so a full service account is optional.
+const loadServiceAccount = () => {
+  const fix = (acc) => {
+    if (acc?.private_key) acc.private_key = acc.private_key.replace(/\\n/g, "\n");
+    return acc?.private_key?.includes("BEGIN PRIVATE KEY") ? acc : null;
+  };
+
+  // 1) Whole JSON in one variable
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const acc = fix(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY));
+      if (acc) return acc;
+    } catch (err) {
+      console.warn("⚠️ FIREBASE_SERVICE_ACCOUNT_KEY is not valid JSON:", err.message);
+    }
+  }
+
+  // 2) Separate variables (private key stored base64-encoded)
+  const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY_B64 } = process.env;
+  if (FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY_B64) {
+    const acc = fix({
+      project_id: FIREBASE_PROJECT_ID,
+      client_email: FIREBASE_CLIENT_EMAIL,
+      private_key: Buffer.from(FIREBASE_PRIVATE_KEY_B64, "base64").toString("utf8"),
+    });
+    if (acc) return acc;
+  }
+
+  // 3) Key file next to the source (git-ignored)
+  try {
+    return fix(require("../serviceAccountKey.json"));
+  } catch {
+    return null;
+  }
+};
+
 let admin = null;
 try {
   admin = require("firebase-admin");
   if (!admin.apps.length) {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (raw) {
-      const serviceAccount = JSON.parse(raw);
-      if (serviceAccount.private_key) {
-        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
-      }
-      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    const serviceAccount = loadServiceAccount();
+    const projectId = serviceAccount?.project_id || process.env.FIREBASE_PROJECT_ID;
+
+    if (serviceAccount) {
+      admin.initializeApp({ credential: admin.credential.cert(serviceAccount), projectId });
+    } else if (projectId) {
+      admin.initializeApp({ projectId });
+      console.log("ℹ️ Firebase Admin running with project ID only (enough for Google login)");
     } else {
-      console.warn("⚠️ FIREBASE_SERVICE_ACCOUNT_KEY not set — Google login disabled");
+      console.warn("⚠️ No Firebase project configured — Google login disabled");
+      admin = null;
     }
   }
 } catch (err) {
@@ -74,7 +113,10 @@ const normalizeEmail = (value) => {
   if (value && typeof value === "object") value = value.email;
   return String(value || "").trim().toLowerCase();
 };
-const findByEmail = (email) =>
+// Emails are saved lowercase, so the exact match (which uses the unique index)
+// finds almost everyone; the case-insensitive scan only runs for old records.
+const findByEmail = async (email) =>
+  (await User.findOne({ email })) ||
   User.findOne({ email }).collation({ locale: "en", strength: 2 });
 
 const maskEmail = (email) => {
@@ -180,6 +222,9 @@ router.post("/google", async (req, res) => {
     const { name, picture } = decoded;
     const email = normalizeEmail(decoded.email);
     if (!email) return res.status(400).json({ message: "No email from Google" });
+    if (decoded.email_verified === false) {
+      return res.status(401).json({ message: "Your Google email is not verified" });
+    }
 
     let user = await findByEmail(email);
     let isNewUser = false;
