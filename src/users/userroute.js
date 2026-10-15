@@ -130,6 +130,22 @@ const sendWelcomeSafely = (email, name) =>
     .then(() => sendWelcomeEmail(email, name))
     .catch((err) => console.error("Welcome email failed:", err.message || err));
 
+// ── Simple in-memory attempt limiter (per key, sliding window) ────────────────
+const MIN_PASSWORD = 6; // same rule as the reset-password page
+const attemptBuckets = new Map();
+const tooManyAttempts = (key, max, windowMs) => {
+  const now = Date.now();
+  const list = (attemptBuckets.get(key) || []).filter((t) => now - t < windowMs);
+  attemptBuckets.set(key, list);
+  if (attemptBuckets.size > 20000) attemptBuckets.clear();
+  return list.length >= max;
+};
+const recordAttempt = (key) => {
+  const list = attemptBuckets.get(key) || [];
+  list.push(Date.now());
+  attemptBuckets.set(key, list);
+};
+
 // ── Register ──────────────────────────────────────────────────────────────────
 router.post("/register", async (req, res) => {
   try {
@@ -144,6 +160,19 @@ router.post("/register", async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).send({ message: "Name, email, and password are required" });
     }
+    if (!EMAIL_RE.test(email) || email.length > 254) {
+      return res.status(400).send({ message: "Please enter a valid email address" });
+    }
+    if (String(password).length < MIN_PASSWORD) {
+      return res.status(400).send({ message: `Password must be at least ${MIN_PASSWORD} characters` });
+    }
+    if (name.length > 60) {
+      return res.status(400).send({ message: "Name is too long" });
+    }
+    if (tooManyAttempts(`register:${req.ip}`, 10, 60 * 60 * 1000)) {
+      return res.status(429).send({ message: "Too many sign-ups from your network. Please try again later." });
+    }
+    recordAttempt(`register:${req.ip}`);
 
     const existingUser = await findByEmail(email);
     if (existingUser) {
@@ -185,11 +214,20 @@ router.post("/login", async (req, res) => {
       return res.status(400).send({ message: "Email and password are required" });
     }
 
-    const user = await findByEmail(email);
-    if (!user) return res.status(404).send({ message: "User not found" });
+    // Slow down password guessing: 10 failed tries per email+IP per 15 minutes
+    const limitKey = `login:${req.ip}:${email}`;
+    if (tooManyAttempts(limitKey, 10, 15 * 60 * 1000)) {
+      return res.status(429).send({ message: "Too many failed attempts. Please wait 15 minutes or reset your password." });
+    }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).send({ message: "Password not match" });
+    // Same answer for "no account" and "wrong password", so emails can't be probed
+    const user = await findByEmail(email);
+    const isMatch = user ? await bcrypt.compare(String(password), user.password) : false;
+    if (!user || !isMatch) {
+      recordAttempt(limitKey);
+      return res.status(401).send({ message: "Incorrect email or password" });
+    }
+    attemptBuckets.delete(limitKey);
 
     const token = generateToken(user);
     res.cookie("token", token, cookieOptions);
@@ -475,18 +513,26 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
     if (!email) return res.status(400).send({ message: "Email is required" });
+    if (!EMAIL_RE.test(email)) return res.status(400).send({ message: "Please enter a valid email address" });
 
+    if (tooManyAttempts(`forgot:${req.ip}`, 5, 15 * 60 * 1000)) {
+      return res.status(429).send({ message: "Too many requests. Please try again in 15 minutes." });
+    }
+    recordAttempt(`forgot:${req.ip}`);
+
+    // Same answer whether or not the account exists, so emails can't be probed
+    const genericReply = { message: "If an account exists for this email, we've sent a password reset link. Please check your inbox." };
     const user = await findByEmail(email);
-    if (!user) return res.status(404).send({ message: "No account found with this email" });
+    if (!user) return res.status(200).send(genericReply);
 
     const resetToken = crypto.randomBytes(32).toString("hex");
     user.resetPasswordToken = resetToken;
     user.resetPasswordExpires = Date.now() + 3600000;
     await user.save();
 
-    await sendResetEmail(user.email, resetToken);
+    await sendResetEmail(user.email, resetToken, user.name);
 
-    res.status(200).send({ message: "Password reset link sent to your email" });
+    res.status(200).send(genericReply);
   } catch (error) {
     console.error("Error in forgot-password:", error);
     res.status(500).send({ message: "Error sending reset email" });
@@ -505,6 +551,9 @@ router.post("/reset-password/:token", async (req, res) => {
     });
 
     if (!user) return res.status(400).send({ message: "Invalid or expired reset token" });
+    if (String(password || "").length < MIN_PASSWORD) {
+      return res.status(400).send({ message: `Password must be at least ${MIN_PASSWORD} characters` });
+    }
 
     user.password = password;
     user.resetPasswordToken = null;
