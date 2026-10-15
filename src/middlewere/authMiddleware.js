@@ -77,4 +77,19 @@ const verifyAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { verifyToken, verifyAdmin };
+// Reads the login if there is one, but never blocks the request
+const optionalAuth = (req, res, next) => {
+  for (const token of getCandidateTokens(req)) {
+    try {
+      const decoded = jwt.verify(token, getSecret());
+      req.userId = decoded.userId || decoded.id || decoded._id;
+      req.role = decoded.role;
+      break;
+    } catch {
+      // try the next token
+    }
+  }
+  next();
+};
+
+module.exports = { verifyToken, verifyAdmin, optionalAuth };
