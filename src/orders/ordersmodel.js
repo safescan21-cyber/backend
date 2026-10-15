@@ -87,6 +87,17 @@ const OrderSchema = new mongoose.Schema(
     estimatedDelivery: {
       type: Date,
     },
+
+    // ── Dispatch ─────────────────────────────────────────────
+    trackingUrl:  { type: String, default: "" },
+    dispatchedAt: { type: Date },
+
+    // ── WhatsApp notifications (prevents sending twice) ──────
+    whatsapp: {
+      invoiceSentAt:  { type: Date },
+      dispatchSentAt: { type: Date },
+      lastError:      { type: String, default: "" },
+    },
   },
   { timestamps: true }
 );

@@ -4,6 +4,19 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Order = require("./ordersmodel");
 const jwt = require("jsonwebtoken");
 const { sendOrderConfirmationEmail } = require("../users/email");
+const { sendInvoiceWhatsApp, sendDispatchWhatsApp } = require("../utils/whatsapp");
+
+// Records the WhatsApp result on the order; never throws.
+const recordWhatsApp = (orderId, sentField, promise) =>
+  promise
+    .then((result) => {
+      if (result?.skipped) return console.log(`WhatsApp ${sentField} skipped for ${orderId}: ${result.skipped}`);
+      return Order.updateOne({ _id: orderId }, { [`whatsapp.${sentField}`]: new Date(), "whatsapp.lastError": "" });
+    })
+    .catch((err) => {
+      console.error(`WhatsApp ${sentField} failed for ${orderId}:`, err.message);
+      return Order.updateOne({ _id: orderId }, { "whatsapp.lastError": err.message }).catch(() => {});
+    });
 
 // ── Optional auth: decodes the token directly if present, but NEVER
 // blocks the request or sends a response on failure. This is what
@@ -188,6 +201,9 @@ router.post("/", attachUserIfPresent, async (req, res) => {
       console.error("Failed to queue order confirmation email:", mailError);
     }
 
+    // Send the PDF invoice on WhatsApp in the background
+    recordWhatsApp(order._id, "invoiceSentAt", sendInvoiceWhatsApp(order));
+
     res.status(201).json({
       message: "Order placed successfully",
       orderId: order.orderId,
@@ -283,30 +299,31 @@ router.get("/:email", async (req, res) => {
   }
 });
 
-// PATCH /api/orders/update-order-status/:id – update status
 // PATCH /api/orders/update-order-status/:id – update order status (admin)
+// When the status becomes "shipped" with a tracking link, the customer gets a
+// WhatsApp dispatch message (only once per order).
 router.patch("/update-order-status/:id", async (req, res) => {
   const { id } = req.params;
   const { status, orderStatus, paymentStatus } = req.body;
+  const trackingUrl = typeof req.body.trackingUrl === "string" ? req.body.trackingUrl.trim() : undefined;
 
-  if (!status && !orderStatus && !paymentStatus) {
+  if (!status && !orderStatus && !paymentStatus && trackingUrl === undefined) {
     return res.status(400).json({ message: "At least one status field is required" });
+  }
+  if (trackingUrl && !/^https?:\/\/\S+$/i.test(trackingUrl)) {
+    return res.status(400).json({ message: "Tracking link must start with http:// or https://" });
   }
 
   try {
     const update = { updatedAt: new Date() };
-    // If status is sent, update both orderStatus and status (for consistency)
-    if (status) {
-      update.orderStatus = status;
-      update.status = status;   // keep legacy field in sync
+    const newStatus = orderStatus || status;
+    if (newStatus) {
+      update.orderStatus = newStatus;
+      update.status = newStatus; // keep legacy field in sync
+      if (newStatus === "shipped") update.dispatchedAt = new Date();
     }
-    if (orderStatus) {
-      update.orderStatus = orderStatus;
-      update.status = orderStatus;
-    }
-    if (paymentStatus) {
-      update.paymentStatus = paymentStatus;
-    }
+    if (paymentStatus) update.paymentStatus = paymentStatus;
+    if (trackingUrl !== undefined) update.trackingUrl = trackingUrl;
 
     const updatedOrder = await Order.findByIdAndUpdate(id, update, {
       new: true,
@@ -317,15 +334,42 @@ router.patch("/update-order-status/:id", async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Dispatch message on WhatsApp
+    let whatsapp = null;
+    if (updatedOrder.orderStatus === "shipped" && !updatedOrder.whatsapp?.dispatchSentAt) {
+      if (!updatedOrder.trackingUrl) {
+        whatsapp = { sent: false, reason: "Add a tracking link to send the dispatch WhatsApp" };
+      } else {
+        try {
+          const result = await sendDispatchWhatsApp(updatedOrder);
+          if (result?.skipped) {
+            whatsapp = { sent: false, reason: result.skipped };
+          } else {
+            updatedOrder.whatsapp.dispatchSentAt = new Date();
+            updatedOrder.whatsapp.lastError = "";
+            await updatedOrder.save();
+            whatsapp = { sent: true };
+          }
+        } catch (err) {
+          console.error(`WhatsApp dispatch failed for ${updatedOrder.orderId}:`, err.message);
+          updatedOrder.whatsapp.lastError = err.message;
+          await updatedOrder.save().catch(() => {});
+          whatsapp = { sent: false, reason: err.message };
+        }
+      }
+    }
+
     res.status(200).json({
       message: "Order status updated successfully",
       order: updatedOrder,
+      whatsapp,
     });
   } catch (error) {
     console.error("Error updating order status:", error);
-    res.status(500).json({ message: "Failed to update order status" });
+    res.status(500).json({ message: error.name === "ValidationError" ? error.message : "Failed to update order status" });
   }
 });
+
 // DELETE /api/orders/delete-order/:id – delete order
 router.delete("/delete-order/:id", async (req, res) => {
   try {
