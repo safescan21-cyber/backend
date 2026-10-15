@@ -4,6 +4,30 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Order = require("./ordersmodel");
 const jwt = require("jsonwebtoken");
 const { sendOrderConfirmationEmail } = require("../users/email");
+const { verifyToken, verifyAdmin } = require("../middlewere/authMiddleware");
+const User = require("../users/Usermodel");
+
+// Email of the logged-in user (cached on the request)
+const getRequestUserEmail = async (req) => {
+  if (req._userEmail !== undefined) return req._userEmail;
+  let email = null;
+  try {
+    const userDoc = await User.findById(req.userId).select("email").lean();
+    email = userDoc?.email?.trim().toLowerCase() || null;
+  } catch (e) {
+    console.error("Could not resolve user email:", e.message);
+  }
+  req._userEmail = email;
+  return email;
+};
+
+// Admins see every order; customers only their own (by account or email)
+const canSeeOrder = async (req, order) => {
+  if (req.role === "admin") return true;
+  if (order.userId && String(order.userId) === String(req.userId)) return true;
+  const email = await getRequestUserEmail(req);
+  return Boolean(email) && [order.email, order.customerInfo?.email].some((e) => e?.toLowerCase() === email);
+};
 const { sendInvoiceWhatsApp, sendDispatchWhatsApp } = require("../utils/whatsapp");
 
 // Records the WhatsApp result on the order; never throws.
@@ -218,8 +242,8 @@ router.post("/", attachUserIfPresent, async (req, res) => {
   }
 });
 
-// GET /api/orders – all orders (admin — ⚠️ currently unprotected)
-router.get("/", async (req, res) => {
+// GET /api/orders – all orders (admin only)
+router.get("/", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 });
     res.status(200).json(orders);
@@ -229,37 +253,13 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /api/orders/my-orders – requires login, matches by userId, resolves email from DB
- // already used globally in your server.js
-
-// ✅ Reads the JWT from the httpOnly cookie set at login, not a header
-router.get("/my-orders", (req, res, next) => {
-  const token = req.cookies?.token; // ⚠️ confirm the cookie name — see below
-
-  if (!token) {
-    return res.status(401).json({ message: "Not authenticated" });
-  }
-
+// GET /api/orders/my-orders – the logged-in user's orders (by account or email)
+router.get("/my-orders", verifyToken, async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Invalid or expired token" });
-  }
-}, async (req, res) => {
-  try {
-    const userId = req.user?.id || req.user?._id;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
-    let email = null;
-    try {
-      const User = require("../users/usermodel"); // ⚠️ confirm path
-      const userDoc = await User.findById(userId).select("email");
-      email = userDoc?.email?.trim().toLowerCase() || null;
-    } catch (e) {
-      console.error("Could not resolve user email:", e.message);
-    }
+    const email = await getRequestUserEmail(req);
 
     const orConditions = [{ userId }];
     if (email) orConditions.push({ email }, { "customerInfo.email": email });
@@ -272,11 +272,47 @@ router.get("/my-orders", (req, res, next) => {
   }
 });
 
-// GET /api/orders/order/:id – single order
-router.get("/order/:id", async (req, res) => {
+// GET /api/orders/track/:orderId – public order tracking by order ID.
+// Returns progress only — never the customer's name, address, phone or email.
+router.get("/track/:orderId", async (req, res) => {
+  const orderId = String(req.params.orderId || "").trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{4,60}$/.test(orderId)) {
+    return res.status(400).json({ message: "Please enter a valid order ID" });
+  }
   try {
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    const order = await Order.findOne({ orderId })
+      .select("orderId orderStatus paymentMethod paymentStatus items.name items.quantity items.image totalAmount orderDate createdAt dispatchedAt estimatedDelivery trackingUrl updatedAt")
+      .lean();
+    if (!order) return res.status(404).json({ message: "No order found with this ID" });
+
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({
+      orderId: order.orderId,
+      status: order.orderStatus,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      items: order.items || [],
+      totalAmount: order.totalAmount,
+      orderDate: order.orderDate || order.createdAt,
+      dispatchedAt: order.dispatchedAt || null,
+      estimatedDelivery: order.estimatedDelivery || null,
+      trackingUrl: order.trackingUrl || "",
+      updatedAt: order.updatedAt,
+    });
+  } catch (error) {
+    console.error("Error tracking order:", error);
+    res.status(500).json({ message: "Could not look up the order. Please try again." });
+  }
+});
+
+// GET /api/orders/order/:id – single order
+router.get("/order/:id", verifyToken, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).catch(() => null);
+    // Same answer for "missing" and "not yours", so order IDs can't be probed
+    if (!order || !(await canSeeOrder(req, order))) {
+      return res.status(404).json({ message: "Order not found" });
+    }
     res.status(200).json(order);
   } catch (error) {
     console.error("Error fetching order by id:", error);
@@ -285,9 +321,12 @@ router.get("/order/:id", async (req, res) => {
 });
 
 // GET /api/orders/:email – orders by email (backward compat)
-router.get("/:email", async (req, res) => {
+router.get("/:email", verifyToken, async (req, res) => {
   const email = req.params.email?.trim().toLowerCase();
   if (!email) return res.status(400).json({ message: "Email is required" });
+  if (req.role !== "admin" && email !== (await getRequestUserEmail(req))) {
+    return res.status(403).json({ message: "You can only view your own orders" });
+  }
   try {
     const orders = await Order.find({
       $or: [{ email }, { "customerInfo.email": email }],
@@ -302,7 +341,7 @@ router.get("/:email", async (req, res) => {
 // PATCH /api/orders/update-order-status/:id – update order status (admin)
 // When the status becomes "shipped" with a tracking link, the customer gets a
 // WhatsApp dispatch message (only once per order).
-router.patch("/update-order-status/:id", async (req, res) => {
+router.patch("/update-order-status/:id", verifyToken, verifyAdmin, async (req, res) => {
   const { id } = req.params;
   const { status, orderStatus, paymentStatus } = req.body;
   const trackingUrl = typeof req.body.trackingUrl === "string" ? req.body.trackingUrl.trim() : undefined;
@@ -371,7 +410,7 @@ router.patch("/update-order-status/:id", async (req, res) => {
 });
 
 // DELETE /api/orders/delete-order/:id – delete order
-router.delete("/delete-order/:id", async (req, res) => {
+router.delete("/delete-order/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const deletedOrder = await Order.findByIdAndDelete(req.params.id);
     if (!deletedOrder) return res.status(404).json({ message: "Order not found" });

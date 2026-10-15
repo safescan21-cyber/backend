@@ -3,13 +3,21 @@ const User = require('../users/Usermodel');
 const Order = require('../orders/ordersmodel');
 const Reviews = require('../review/reviewsmodel');
 const Products = require('../products/productsmodel');
+const { verifyToken, verifyAdmin } = require('../middlewere/authMiddleware');
 const router = express.Router();
 
 // user stats by email
-router.get('/user-stats/:email', async(req, res) => {
-    const { email } = req.params;
+// Logged-in users may only read their own stats; admins may read anyone's
+router.get('/user-stats/:email', verifyToken, async(req, res) => {
+    const email = String(req.params.email || '').trim().toLowerCase();
     if (!email) {
         return res.status(400).send({ message: 'Email is required' });
+    }
+    if (req.role !== 'admin') {
+        const me = await User.findById(req.userId).select('email').lean().catch(() => null);
+        if (me?.email?.toLowerCase() !== email) {
+            return res.status(403).send({ message: 'You can only view your own stats' });
+        }
     }
      try {
         const user =  await User.findOne({ email: email})
@@ -46,7 +54,7 @@ router.get('/user-stats/:email', async(req, res) => {
 })
 
 // admin status 
-router.get('/admin-stats', async (req, res) => {
+router.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
     try {
       // Count total orders
       const totalOrders = await Order.countDocuments();

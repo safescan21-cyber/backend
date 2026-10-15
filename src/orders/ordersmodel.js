@@ -36,6 +36,8 @@ const OrderSchema = new mongoose.Schema(
       unique:   true,
       index:    true,
     },
+    // Account that placed the order (null for guest checkout)
+    userId: { type: String, default: null, index: true },
     customerInfo:    { type: CustomerInfoSchema,    required: true },
     shippingAddress: { type: ShippingAddressSchema, required: true },
     items: {
