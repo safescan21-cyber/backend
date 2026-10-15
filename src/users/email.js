@@ -96,13 +96,14 @@ const sendWelcomeEmail = (to, name) => {
   return true;
 };
 
-const sendSubscriptionEmail = (to) => {
-  const unsubscribeLink = `${frontendUrl}/unsubscribe?email=${encodeURIComponent(to)}`;
+// unsubscribeUrl: one-click link built by the newsletter route (token based)
+const sendSubscriptionEmail = (to, unsubscribeUrl) => {
   const html = `
-    <div style="font-family: Arial, sans-serif;">
-      <h2>You're now subscribed!</h2>
-      <p>Thank you for subscribing to our newsletter. You'll receive updates and exclusive offers.</p>
-      <p><a href="${unsubscribeLink}" style="display:inline-block;padding:8px 16px;background:#f44336;color:#fff;text-decoration:none;border-radius:4px;">Unsubscribe</a></p>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color:#333; line-height:1.5;">
+      <h2 style="color:#4CAF50;">You're subscribed! 🎉</h2>
+      <p>Thanks for subscribing to the Food Pharma Machinery newsletter. You'll get regulatory updates, machine specs and pharma tech news — no spam.</p>
+      <p><a href="${frontendUrl}/shop" style="display:inline-block;padding:10px 20px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:5px;">Browse machines</a></p>
+      ${unsubscribeUrl ? `<p style="color:#888;font-size:12px;margin-top:24px;">Don't want these emails? <a href="${unsubscribeUrl}" style="color:#888;">Unsubscribe</a> with one click.</p>` : ''}
     </div>
   `;
 
@@ -112,6 +113,7 @@ const sendSubscriptionEmail = (to) => {
       to,
       subject: 'Subscription Confirmed ✅',
       html,
+      ...(unsubscribeUrl ? { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` } } : {}),
     })
   );
   return true;
