@@ -28,6 +28,7 @@ const heroRoutes = require("./src/Hero/heroRoutes");
 const pressRoutes = require("./src/press/pressRoutes");
 const newsletterRoutes = require("./src/news/newsletterRoutes");
 const contactRoutes = require("./src/contact/contactRoutes");
+const quoteRoutes = require("./src/users/Quoteroutes");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -115,6 +116,7 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api", uploadRoutes);
 app.use("/", uploadRoutes);
 app.use("/api", contactRoutes);
+app.use("/api/quote", quoteRoutes);
 
 app.get("/", (req, res) => {
   return res.send("hello world");
