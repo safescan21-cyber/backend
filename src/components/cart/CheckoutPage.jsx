@@ -400,12 +400,7 @@ const CheckoutPage = () => {
         await saveUserAddress(addressData);
       }
 
-      // Send confirmation email (fire-and-forget)
-      fetch(`${getBaseURL()}/api/orders/send-order-confirmation`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderData, userEmail: email }),
-      }).catch(() => {});
+      // Confirmation email is sent by the server when the order is saved
 
     } catch (err) {
       console.error('Order failed:', err);

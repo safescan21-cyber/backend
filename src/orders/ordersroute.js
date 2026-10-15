@@ -3,19 +3,7 @@ const router = express.Router();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Order = require("./ordersmodel");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
-
-
-// ─── Email transporter ──────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const { sendOrderConfirmationEmail } = require("../users/email");
 
 // ── Optional auth: decodes the token directly if present, but NEVER
 // blocks the request or sends a response on failure. This is what
@@ -193,6 +181,13 @@ router.post("/", attachUserIfPresent, async (req, res) => {
 
     await order.save();
 
+    // Queue the confirmation email — never blocks or fails the order
+    try {
+      sendOrderConfirmationEmail(order);
+    } catch (mailError) {
+      console.error("Failed to queue order confirmation email:", mailError);
+    }
+
     res.status(201).json({
       message: "Order placed successfully",
       orderId: order.orderId,
@@ -343,51 +338,6 @@ router.delete("/delete-order/:id", async (req, res) => {
   } catch (error) {
     console.error("Error deleting order:", error);
     res.status(500).json({ message: "Failed to delete order" });
-  }
-});
-
-// ─── SEND CONFIRMATION EMAIL ──────────────────────────────
-router.post("/send-order-confirmation", async (req, res) => {
-  const { orderData, userEmail } = req.body;
-  if (!orderData || !userEmail) {
-    return res.status(400).json({ error: "Missing order data or email" });
-  }
-  try {
-    const itemsList = orderData.items
-      .map(item => `${item.name} × ${item.quantity} – ₹${item.price * item.quantity}`)
-      .join('\n');
-
-    const mailOptions = {
-      from: process.env.SMTP_FROM || 'noreply@yourapp.com',
-      to: userEmail,
-      subject: `Order Confirmation – #${orderData.orderId}`,
-      text: `
-        Thank you for your order!
-
-        Order ID: ${orderData.orderId}
-        Date: ${new Date(orderData.orderDate).toLocaleString()}
-        Total: ₹${orderData.totalAmount}
-
-        Items:
-        ${itemsList}
-
-        Shipping Address:
-        ${orderData.shippingAddress.addressLine1}
-        ${orderData.shippingAddress.city}, ${orderData.shippingAddress.state} – ${orderData.shippingAddress.pincode}
-        ${orderData.shippingAddress.country}
-
-        Estimated delivery: ${new Date(orderData.estimatedDelivery).toLocaleDateString()}
-
-        We'll notify you when your order ships.
-        Thanks for shopping with us!
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-    res.status(200).json({ message: "Confirmation email sent" });
-  } catch (error) {
-    console.error("Email sending error:", error);
-    res.status(500).json({ error: "Failed to send email" });
   }
 });
 

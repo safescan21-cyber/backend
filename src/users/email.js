@@ -138,9 +138,134 @@ const sendContactEmail = (name, email, subject, message) => {
   return true;
 };
 
+// Escape customer-supplied text before putting it into HTML
+const esc = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+
+const inr = (amount) => `₹${Number(amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+const sendOrderConfirmationEmail = (order) => {
+  const to = order?.customerInfo?.email || order?.email;
+  if (!to) return false;
+
+  const { customerInfo = {}, shippingAddress = {}, items = [] } = order;
+  const paymentLabel = {
+    cod: 'Cash on Delivery',
+    card: 'Card',
+    upi: 'UPI',
+    wallet: 'Wallet',
+  }[order.paymentMethod] || order.paymentMethod;
+
+  const shopUrl = `${frontendUrl}/shop`;
+  const productUrl = (item) =>
+    item.productId ? `${shopUrl}/${encodeURIComponent(item.productId)}` : shopUrl;
+
+  // One row per product: image | name (linked) + qty × price | line total.
+  // Three narrow columns so it stays readable on a phone without scrolling.
+  const rows = items.map((item) => {
+    const url = productUrl(item);
+    const image = /^https?:\/\//i.test(item.image || '')
+      ? `<a href="${esc(url)}"><img src="${esc(item.image)}" alt="${esc(item.name)}" width="64" height="64" style="display:block;width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #eee;" /></a>`
+      : '';
+    return `
+      <tr>
+        <td width="72" style="padding:12px 8px 12px 0;border-bottom:1px solid #eee;vertical-align:top;">${image}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #eee;vertical-align:top;">
+          <a href="${esc(url)}" style="color:#1a73e8;text-decoration:none;font-weight:bold;font-size:15px;">${esc(item.name)}</a>
+          <div style="color:#777;font-size:13px;margin-top:4px;">Qty ${esc(item.quantity)} × ${inr(item.price)}</div>
+          <a href="${esc(url)}" style="color:#4CAF50;font-size:13px;text-decoration:none;">View product →</a>
+        </td>
+        <td style="padding:12px 0 12px 8px;border-bottom:1px solid #eee;vertical-align:top;text-align:right;white-space:nowrap;font-weight:bold;">${inr(item.price * item.quantity)}</td>
+      </tr>`;
+  }).join('');
+
+  const address = [
+    shippingAddress.addressLine1,
+    shippingAddress.addressLine2,
+    [shippingAddress.city, shippingAddress.state].filter(Boolean).join(', ')
+      + (shippingAddress.pincode ? ` – ${shippingAddress.pincode}` : ''),
+    shippingAddress.country,
+  ].filter(Boolean).map(esc).join('<br/>');
+
+  const delivery = order.estimatedDelivery
+    ? new Date(order.estimatedDelivery).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+    : null;
+
+  const button = (href, label, bg) =>
+    `<a href="${href}" class="btn" style="display:inline-block;padding:12px 22px;margin:6px 4px;background:${bg};color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;">${label}</a>`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Confirmation</title>
+  <style>
+    @media only screen and (max-width: 480px) {
+      .wrap { padding: 16px !important; }
+      .title { font-size: 20px !important; }
+      .btn { display: block !important; margin: 8px 0 !important; text-align: center !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f4;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">
+    <tr><td align="center" style="padding:16px 8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:10px;">
+        <tr><td class="wrap" style="padding:28px;font-family:Arial,sans-serif;color:#333;font-size:14px;line-height:1.5;">
+          <h2 class="title" style="color:#4CAF50;margin:0 0 8px;font-size:24px;">Thank you for your order, ${esc(customerInfo.firstName) || 'there'}!</h2>
+          <p style="margin:0 0 16px;">We've received your order and it's now being processed.</p>
+          <p style="margin:0 0 16px;background:#f8f8f8;padding:12px;border-radius:6px;">
+            <strong>Order ID:</strong> ${esc(order.orderId)}<br/>
+            <strong>Order date:</strong> ${new Date(order.orderDate || Date.now()).toLocaleString('en-IN')}<br/>
+            <strong>Payment:</strong> ${esc(paymentLabel)} (${esc(order.paymentStatus)})
+          </p>
+
+          <h3 style="margin:20px 0 4px;font-size:16px;">Your products</h3>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+            ${rows}
+          </table>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">
+            <tr><td style="color:#777;">Subtotal</td><td align="right">${inr(order.subtotal)}</td></tr>
+            <tr><td style="color:#777;">Shipping</td><td align="right">${inr(order.shippingCost)}</td></tr>
+            ${order.discount ? `<tr><td style="color:#777;">Discount</td><td align="right">−${inr(order.discount)}</td></tr>` : ''}
+            <tr><td style="padding-top:8px;font-size:16px;"><strong>Total</strong></td><td align="right" style="padding-top:8px;font-size:16px;"><strong>${inr(order.totalAmount)}</strong></td></tr>
+          </table>
+
+          <h3 style="margin:24px 0 4px;font-size:16px;">Shipping address</h3>
+          <p style="margin:0;">${esc(`${customerInfo.firstName || ''} ${customerInfo.lastName || ''}`.trim())}<br/>${address}</p>
+          ${delivery ? `<p style="margin:12px 0 0;"><strong>Estimated delivery:</strong> ${delivery}</p>` : ''}
+
+          <div style="text-align:center;margin-top:24px;">
+            ${button(`${frontendUrl}/dashboard/orders`, 'View your orders', '#4CAF50')}
+            ${button(shopUrl, 'Continue shopping', '#1a73e8')}
+          </div>
+          <p style="margin:24px 0 0;color:#777;font-size:13px;text-align:center;">We'll let you know when your order ships. Thanks for shopping with us!</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  emailQueue.add(() =>
+    transporter.sendMail({
+      from,
+      to,
+      subject: `Order Confirmation – #${order.orderId}`,
+      html,
+    })
+  );
+  return true;
+};
+
 module.exports = {
   sendResetEmail,
   sendWelcomeEmail,
   sendSubscriptionEmail,
   sendContactEmail,
+  sendOrderConfirmationEmail,
 };
