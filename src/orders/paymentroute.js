@@ -3,6 +3,7 @@ const express = require("express");
 const router  = express.Router();
 const Stripe  = require("stripe");
 const Order   = require("../orders/ordersmodel"); // adjust path if needed
+const { sendOrderStatusEmail } = require("../users/email");
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -192,13 +193,17 @@ router.post(
           if (charge.payment_intent) {
             const pi = await stripe.paymentIntents.retrieve(charge.payment_intent);
             if (pi.metadata?.orderId) {
-              await Order.findOneAndUpdate(
+              const before = await Order.findOneAndUpdate(
                 { orderId: pi.metadata.orderId },
                 {
                   paymentStatus: "refunded",
                   orderStatus:   "refunded",
                 }
               );
+              // Stripe can resend events, so only email on the first refund
+              if (before && before.orderStatus !== "refunded") {
+                sendOrderStatusEmail({ ...before.toObject(), orderStatus: "refunded" });
+              }
             }
           }
           break;

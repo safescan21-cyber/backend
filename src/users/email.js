@@ -1,5 +1,6 @@
 // services/email.js
 const nodemailer = require('nodemailer');
+const { generateInvoicePdf } = require('../orders/invoice');
 
 // ─── SMTP Transporter with connection pooling ───
 const transporter = nodemailer.createTransport({
@@ -240,10 +241,10 @@ const sendOrderConfirmationEmail = (order) => {
           ${delivery ? `<p style="margin:12px 0 0;"><strong>Estimated delivery:</strong> ${delivery}</p>` : ''}
 
           <div style="text-align:center;margin-top:24px;">
-            ${button(`${frontendUrl}/dashboard/orders`, 'View your orders', '#4CAF50')}
+            ${button(trackUrl(order.orderId), 'Track your order', '#4CAF50')}
             ${button(shopUrl, 'Continue shopping', '#1a73e8')}
           </div>
-          <p style="margin:24px 0 0;color:#777;font-size:13px;text-align:center;">We'll let you know when your order ships. Thanks for shopping with us!</p>
+          <p style="margin:24px 0 0;color:#777;font-size:13px;text-align:center;">Your invoice is attached as a PDF. We'll email you whenever your order status changes. Thanks for shopping with us!</p>
         </td></tr>
       </table>
     </td></tr>
@@ -251,14 +252,113 @@ const sendOrderConfirmationEmail = (order) => {
 </body>
 </html>`;
 
-  emailQueue.add(() =>
-    transporter.sendMail({
+  emailQueue.add(async () => {
+    // The invoice is built inside the queued task so checkout never waits for it
+    let attachments = [];
+    try {
+      attachments = [{ filename: `Invoice-${order.orderId}.pdf`, content: await generateInvoicePdf(order), contentType: 'application/pdf' }];
+    } catch (err) {
+      console.error('Invoice PDF failed, sending email without it:', err.message);
+    }
+    return transporter.sendMail({
       from,
       to,
       subject: `Order Confirmation – #${order.orderId}`,
       html,
-    })
-  );
+      attachments,
+    });
+  });
+  return true;
+};
+
+const trackUrl = (orderId) => `${frontendUrl}/track-order?id=${encodeURIComponent(orderId)}`;
+
+// One email per order status change
+const STATUS_LABELS = {
+  confirmed: 'Confirmed', processing: 'Processing', shipped: 'Dispatched',
+  delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded',
+};
+const STATUS_EMAILS = {
+  processing: {
+    subject: (id) => `Your order #${id} is being processed`,
+    heading: 'Your order is being prepared',
+    text: "Good news! We've started processing your order. We'll email you again as soon as it's dispatched.",
+    color: '#1a73e8',
+  },
+  shipped: {
+    subject: (id) => `Your order #${id} has been dispatched 🚚`,
+    heading: 'Your order is on its way!',
+    text: 'Your order has been dispatched and is on its way to you.',
+    color: '#4CAF50',
+  },
+  delivered: {
+    subject: (id) => `Your order #${id} has been delivered`,
+    heading: 'Your order has been delivered',
+    text: 'Your order has been delivered. We hope you are happy with your purchase! If anything is not right, just reply to this email.',
+    color: '#4CAF50',
+  },
+  cancelled: {
+    subject: (id) => `Your order #${id} has been cancelled`,
+    heading: 'Your order has been cancelled',
+    text: 'Your order has been cancelled. If you paid online, any refund will be processed to your original payment method. Reply to this email if you have any questions.',
+    color: '#e53935',
+  },
+  refunded: {
+    subject: (id) => `Refund for order #${id}`,
+    heading: 'Your refund has been processed',
+    text: 'We have processed a refund for your order. It can take 5–7 working days to appear in your account.',
+    color: '#1a73e8',
+  },
+  confirmed: {
+    subject: (id) => `Your order #${id} is confirmed`,
+    heading: 'Your order is confirmed',
+    text: 'Your order is confirmed and will be processed shortly.',
+    color: '#4CAF50',
+  },
+};
+
+const sendOrderStatusEmail = (order) => {
+  const to = order?.customerInfo?.email || order?.email;
+  const tpl = STATUS_EMAILS[order?.orderStatus];
+  if (!to || !tpl) return false;
+
+  const name = esc(order.customerInfo?.firstName) || 'there';
+  const items = (order.items || []).map((i) => `${esc(i.name)} × ${esc(i.quantity)}`).join('<br/>');
+  const trackingBlock = order.orderStatus === 'shipped' && order.trackingUrl
+    ? `<p style="margin:16px 0;text-align:center;"><a href="${esc(order.trackingUrl)}" style="display:inline-block;padding:12px 22px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Track your parcel</a></p>
+       <p style="margin:0;color:#777;font-size:12px;text-align:center;word-break:break-all;">${esc(order.trackingUrl)}</p>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>${esc(tpl.heading)}</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">
+    <tr><td align="center" style="padding:16px 8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:10px;">
+        <tr><td style="padding:28px;font-family:Arial,sans-serif;color:#333;font-size:14px;line-height:1.5;">
+          <h2 style="color:${tpl.color};margin:0 0 8px;font-size:22px;">${esc(tpl.heading)}</h2>
+          <p style="margin:0 0 16px;">Hi ${name},</p>
+          <p style="margin:0 0 16px;">${esc(tpl.text)}</p>
+          ${trackingBlock}
+          <p style="margin:16px 0;background:#f8f8f8;padding:12px;border-radius:6px;">
+            <strong>Order ID:</strong> ${esc(order.orderId)}<br/>
+            <strong>Status:</strong> ${esc(STATUS_LABELS[order.orderStatus])}<br/>
+            <strong>Total:</strong> ${inr(order.totalAmount)}
+          </p>
+          ${items ? `<p style="margin:0 0 16px;"><strong>Items</strong><br/>${items}</p>` : ''}
+          <div style="text-align:center;margin-top:20px;">
+            <a href="${trackUrl(order.orderId)}" style="display:inline-block;padding:12px 22px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">View order status</a>
+          </div>
+          <p style="margin:24px 0 0;color:#777;font-size:13px;text-align:center;">Questions? Just reply to this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  emailQueue.add(() => transporter.sendMail({ from, to, subject: tpl.subject(order.orderId), html }));
   return true;
 };
 
@@ -268,4 +368,5 @@ module.exports = {
   sendSubscriptionEmail,
   sendContactEmail,
   sendOrderConfirmationEmail,
+  sendOrderStatusEmail,
 };

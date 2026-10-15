@@ -3,7 +3,7 @@ const router = express.Router();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Order = require("./ordersmodel");
 const jwt = require("jsonwebtoken");
-const { sendOrderConfirmationEmail } = require("../users/email");
+const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require("../users/email");
 const { verifyToken, verifyAdmin } = require("../middlewere/authMiddleware");
 const User = require("../users/Usermodel");
 
@@ -364,6 +364,11 @@ router.patch("/update-order-status/:id", verifyToken, verifyAdmin, async (req, r
     if (paymentStatus) update.paymentStatus = paymentStatus;
     if (trackingUrl !== undefined) update.trackingUrl = trackingUrl;
 
+    const before = await Order.findById(id).select("orderStatus trackingUrl").lean().catch(() => null);
+    if (!before) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
     const updatedOrder = await Order.findByIdAndUpdate(id, update, {
       new: true,
       runValidators: true,
@@ -371,6 +376,20 @@ router.patch("/update-order-status/:id", verifyToken, verifyAdmin, async (req, r
 
     if (!updatedOrder) {
       return res.status(404).json({ message: "Order not found" });
+    }
+
+    // Email the customer when the status changes, or when a tracking link
+    // is added to an order that is already dispatched
+    const statusChanged = updatedOrder.orderStatus !== before.orderStatus;
+    const trackingAdded =
+      updatedOrder.orderStatus === "shipped" && updatedOrder.trackingUrl && updatedOrder.trackingUrl !== before.trackingUrl;
+    let emailQueued = false;
+    if (statusChanged || trackingAdded) {
+      try {
+        emailQueued = sendOrderStatusEmail(updatedOrder);
+      } catch (mailError) {
+        console.error("Failed to queue order status email:", mailError);
+      }
     }
 
     // Dispatch message on WhatsApp
@@ -402,6 +421,7 @@ router.patch("/update-order-status/:id", verifyToken, verifyAdmin, async (req, r
       message: "Order status updated successfully",
       order: updatedOrder,
       whatsapp,
+      emailQueued,
     });
   } catch (error) {
     console.error("Error updating order status:", error);
