@@ -13,7 +13,11 @@ const ProductSchema = new mongoose.Schema(
     price: { type: Number, required: true },
     oldPrice: { type: Number },
     images: { type: [String], required: true },
+    // Product videos (Cloudinary URLs) — the admin form uploads these
+    videos: { type: [String], default: [] },
     color: { type: String, required: true },
+    origin: { type: String, trim: true },
+    productType: { type: String, trim: true },
     rating: { type: Number, default: 0 },
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 

@@ -14,7 +14,7 @@ router.get("/sitemap-content.xml", async (req, res) => {
   try {
     const [press, products] = await Promise.all([
       PressRelease.find({ isActive: true }).select("_id updatedAt publishedDate").sort({ publishedDate: -1 }).limit(5000).lean(),
-      Products.find({}).select("_id updatedAt createdAt").limit(5000).lean(),
+      Products.find({ images: { $not: /\/demo-products\// } }) // demo products stay out of Google.select("_id updatedAt createdAt").limit(5000).lean(),
     ]);
     const urls = [
       ...press.map((p) => ({ loc: `${SITE}/press/${p._id}`, lastmod: day(p.updatedAt || p.publishedDate), priority: "0.7" })),
