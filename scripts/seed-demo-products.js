@@ -120,12 +120,137 @@ const PRODUCTS = [
     description: "Laboratory analytical balance with draft shield, internal calibration and USB/RS-232 output for GLP reports.",
     specifications: [["Capacity", "220 g"], ["Readability", "0.1 mg"], ["Pan size", "Ø 90 mm"], ["Calibration", "Internal, automatic"]],
   },
+
+  // ── Batch 2: categories the menus link to that had no products. Photos: Unsplash ("unsplash:<photo id>") ──
+  {
+    name: "Rapid Mixer Granulator – 150 L",
+    category: "granulation", price: 1150000, oldPrice: 1250000, stock: 2, warranty: 24, origin: "india",
+    images: ["unsplash:photo-1717386255773-1e3037c81788", "unsplash:photo-1717386255773-a456c611dc4e"],
+    videos: [],
+    description: "High-shear rapid mixer granulator for wet granulation with impeller and chopper, PLC/HMI recipe control and pneumatic discharge.",
+    specifications: [["Working capacity", "150 L"], ["Impeller motor", "20/15 HP, two speed"], ["Chopper motor", "5/3 HP"], ["Contact parts", "SS 316L"]],
+  },
+  {
+    name: "Auto Coater – 48 inch Tablet Coating Pan",
+    category: "coating", price: 1650000, stock: 1, warranty: 24, origin: "india",
+    images: ["unsplash:photo-1757578097654-fdae0f7cf008"],
+    videos: [],
+    description: "Perforated pan auto-coater for film and sugar coating of tablets, with spray guns, inlet/exhaust air handling and batch reports.",
+    specifications: [["Pan diameter", "48 inch"], ["Batch size", "Up to 150 kg"], ["Spray guns", "3 automatic"], ["Pan speed", "2–18 rpm"]],
+  },
+  {
+    name: "Automatic Cartoning Machine – 120 cartons/min",
+    category: "packaging-accessories", price: 1850000, stock: 1, warranty: 12, origin: "india",
+    images: ["unsplash:photo-1764745021344-317b80f09e40"],
+    videos: [],
+    description: "Horizontal cartoner for blisters, bottles and tubes with leaflet insertion, batch coding and no-product-no-carton checks.",
+    specifications: [["Speed", "Up to 120 cartons/min"], ["Carton size", "L 50–200 × W 20–100 × H 15–70 mm"], ["Leaflet", "Folded insertion"], ["Power", "3 kW"]],
+  },
+  {
+    name: "Self-Adhesive Sticker Labelling Machine",
+    category: "packaging-accessories", price: 285000, oldPrice: 310000, stock: 6, warranty: 12, readyToDispatch: true, origin: "india",
+    images: ["unsplash:photo-1773525912464-d2640e7aff9c"],
+    videos: [],
+    description: "Wrap-around labeller for round bottles and vials with label sensing, batch printing and missing-label rejection.",
+    specifications: [["Output", "Up to 150 bottles/min"], ["Container diameter", "20–100 mm"], ["Label height", "15–150 mm"], ["Accuracy", "±1 mm"]],
+  },
+  {
+    name: "Dynamic Checkweigher with Auto Reject",
+    category: "inspection", price: 395000, stock: 4, warranty: 12, origin: "india",
+    images: ["unsplash:photo-1717386255767-52643970d483"],
+    videos: [],
+    description: "In-line checkweigher that weighs every pack on the conveyor and rejects under- or over-weight cartons and bottles.",
+    specifications: [["Weighing range", "10 g – 3 kg"], ["Accuracy", "±0.5 g"], ["Speed", "Up to 120 packs/min"], ["Reject", "Air blast / pusher"]],
+  },
+  {
+    name: "Tablet Metal Detector",
+    category: "inspection", price: 265000, stock: 3, warranty: 12, readyToDispatch: true, origin: "germany",
+    images: ["unsplash:photo-1716191300020-b52dec5b70a8"],
+    videos: [],
+    description: "Free-fall metal detector for tablets and capsules, mounted after the press or deduster, with automatic reject flap.",
+    specifications: [["Sensitivity", "Fe 0.3 mm, SS 0.5 mm"], ["Throughput", "Up to 1 million tablets/hour"], ["Reject", "Automatic flap"], ["Contact parts", "SS 316L"]],
+  },
+  {
+    name: "Steam Sterilizer (Autoclave) – 300 L",
+    category: "sterile", price: 1450000, stock: 1, warranty: 24, origin: "india",
+    images: ["unsplash:photo-1748349221526-33b51820b21e", "unsplash:photo-1754372069872-3fef8a815c87"],
+    videos: [],
+    description: "Double-door steam sterilizer for cleanroom use with PLC control, vacuum pre-pulsing and 21 CFR Part 11 ready batch records.",
+    specifications: [["Chamber volume", "300 L"], ["Doors", "Double, interlocked"], ["Sterilization", "121–134 °C"], ["Control", "PLC with HMI"]],
+  },
+  {
+    name: "Laminar Air Flow Unit – Vertical",
+    category: "hvac", price: 145000, stock: 8, warranty: 12, readyToDispatch: true, origin: "india",
+    images: ["unsplash:photo-1748349221526-33b51820b21e"],
+    videos: [],
+    description: "Vertical laminar air flow workstation with HEPA filtration for aseptic sampling, dispensing and lab work.",
+    specifications: [["Work area", "4 × 2 ft"], ["Filter", "HEPA H14"], ["Air velocity", "0.45 m/s ± 20%"], ["Cabinet", "SS 304"]],
+  },
+  {
+    name: "Strip Packing Machine – Alu-Alu, 4 Track",
+    category: "strip-packaging", price: 975000, stock: 2, warranty: 12, origin: "india",
+    images: ["unsplash:photo-1705517243962-230c07db6b23", "unsplash:photo-1630094539386-280edfb5d46a"],
+    videos: [],
+    description: "Heat-sealing strip packer for moisture-sensitive tablets and capsules with batch coding and perforation.",
+    specifications: [["Tracks", "4"], ["Speed", "Up to 20,000 tablets/hour"], ["Foil", "Alu-Alu / Alu-Poly"], ["Sealing", "Twin heated rollers"]],
+  },
+  {
+    name: "Auger Powder Filling Machine",
+    category: "powder-filling", price: 365000, stock: 3, warranty: 12, readyToDispatch: true, origin: "india",
+    images: ["unsplash:photo-1475906067486-6c5bd3aa9c9d", "unsplash:photo-1599727277757-3f54e54ea618"],
+    videos: [],
+    description: "Servo auger filler for dry syrups, protein powders and spices into bottles, jars and pouches.",
+    specifications: [["Fill range", "5–1,000 g"], ["Accuracy", "±1%"], ["Output", "Up to 40 fills/min"], ["Drive", "Servo motor"]],
+  },
+  {
+    name: "Multi Mill – Comminuting Mill",
+    category: "milling", price: 215000, stock: 5, warranty: 12, readyToDispatch: true, origin: "india",
+    images: ["unsplash:photo-1589792924333-edbfbe7c8be7"],
+    videos: [],
+    description: "Swing-hammer multi mill for size reduction of wet and dry granules, with interchangeable screens.",
+    specifications: [["Output", "50–500 kg/h"], ["Rotor speed", "750 / 1,500 / 2,500 rpm"], ["Motor", "3 HP"], ["Contact parts", "SS 316"]],
+  },
+  {
+    name: "Tablet Press Punches & Dies Set – D Tooling",
+    category: "tooling", price: 48000, stock: 25, warranty: 6, readyToDispatch: true, origin: "india",
+    images: ["unsplash:photo-1787039467622-ddec5c24320c"],
+    videos: [],
+    description: "Upper and lower punches with dies in D tooling, made to your tablet drawing, with embossing and break lines.",
+    specifications: [["Tooling", "D (EU / TSM)"], ["Steel", "OHNS / D2 / HCHCr"], ["Set", "Per station (upper, lower, die)"], ["Lead time", "On drawing approval"]],
+  },
+  {
+    name: "Tablet Hardness & Friability Tester",
+    category: "lab-equipment", price: 68000, stock: 10, warranty: 12, readyToDispatch: true, origin: "india",
+    images: ["unsplash:photo-1602052577122-f73b9710adba", "unsplash:photo-1646956141021-d687dcfe5fb9"],
+    videos: [],
+    description: "Combined QC tester for tablet hardness and friability with printer output for batch records.",
+    specifications: [["Hardness range", "0–50 kp"], ["Friability", "Twin drum, 25 rpm"], ["Display", "Digital"], ["Output", "Thermal printer"]],
+  },
+  {
+    name: "SS Storage Tank – 1000 L Jacketed",
+    category: "mixing", price: 325000, stock: 2, warranty: 12, origin: "india",
+    images: ["unsplash:photo-1513828170880-00eeeac21306"],
+    videos: [],
+    description: "Jacketed stainless steel holding tank with slow-speed stirrer for syrups, suspensions and liquid food products.",
+    specifications: [["Capacity", "1,000 L"], ["Jacket", "Hot water / steam"], ["Stirrer", "Anchor, 24 rpm"], ["Finish", "Mirror inside, matt outside"]],
+  },
 ];
 
-const commonsTitles = () => {
+const isUnsplash = (m) => m.startsWith("unsplash:");
+
+const commonsTitles = (list) => {
   const t = new Set();
-  for (const p of PRODUCTS) for (const m of [...p.images, ...p.videos]) t.add(m.startsWith("frame:") ? m.split(":")[1] : m);
+  for (const p of list) for (const m of [...p.images, ...p.videos]) if (!isUnsplash(m)) t.add(m.startsWith("frame:") ? m.split(":")[1] : m);
   return [...t];
+};
+
+// Unsplash photos are free to use without attribution (Unsplash License)
+const unsplashInfo = (list) => {
+  const info = {};
+  for (const p of list) for (const m of p.images) {
+    if (isUnsplash(m)) info[m] = { isVideo: false, url: `https://images.unsplash.com/${m.slice(9)}?w=1600&q=80&fm=jpg`, unsplash: true };
+  }
+  return info;
 };
 
 // URLs (1600px for photos, original for videos) and credits for every Commons file
@@ -184,8 +309,9 @@ const seed = async () => {
   const todo = PRODUCTS.filter((p) => !existing.has(p.name));
   if (!todo.length) return console.log(`All ${PRODUCTS.length} demo products already exist.`);
 
-  console.log("Looking up media on Wikimedia Commons…");
-  const info = await fetchCommonsInfo(commonsTitles());
+  const titles = commonsTitles(todo);
+  if (titles.length) console.log("Looking up media on Wikimedia Commons…");
+  const info = { ...(titles.length ? await fetchCommonsInfo(titles) : {}), ...unsplashInfo(todo) };
 
   const uploaded = {};
   const upload = async (title) => {
@@ -212,7 +338,7 @@ const seed = async () => {
     for (const v of p.videos) videos.push((await upload(v)).secure_url.replace(/\.\w+$/, ".mp4"));
 
     const credits = [...new Set([...p.images, ...p.videos].map((m) => (m.startsWith("frame:") ? m.split(":")[1] : m)))]
-      .map((t) => `${info[t].isVideo ? "Video" : "Photo"}: ${info[t].artist}, ${info[t].license}, via Wikimedia Commons`);
+      .map((t) => (info[t].unsplash ? "Photo: Unsplash (free licence)" : `${info[t].isVideo ? "Video" : "Photo"}: ${info[t].artist}, ${info[t].license}, via Wikimedia Commons`));
 
     const doc = await Products.create({
       name: p.name,
