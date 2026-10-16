@@ -7,7 +7,7 @@ const activityEventSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ["page_view", "product_view", "product_like", "product_unlike", "add_to_cart"],
+    enum: ["page_view", "product_view", "product_like", "product_unlike", "add_to_cart", "product_share"],
   },
   path:        { type: String, default: "" },
   productId:   { type: String, default: null, index: true },

@@ -8,7 +8,7 @@ const User = require("../users/Usermodel");
 const Products = require("../products/productsmodel");
 const { verifyToken, verifyAdmin, optionalAuth } = require("../middlewere/authMiddleware");
 
-const TYPES = ["page_view", "product_view", "product_like", "product_unlike", "add_to_cart"];
+const TYPES = ["page_view", "product_view", "product_like", "product_unlike", "add_to_cart", "product_share"];
 
 // Simple per-IP limit so the endpoint can't be flooded
 const hits = new Map();
