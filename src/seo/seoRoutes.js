@@ -3,6 +3,9 @@
 // database, so new content is listed without redeploying the website.
 // nginx on www.foodpharmamachinery.com proxies this path to the API.
 const router = require("express").Router();
+
+// GET /seo-shell/shop/:id and /seo-shell/press/:id — pages with their own SEO tags (see pageShells.js)
+router.use(require("./pageShells"));
 const PressRelease = require("../press/PressRelease");
 const Products = require("../products/productsmodel");
 
