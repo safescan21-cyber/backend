@@ -447,13 +447,56 @@ router.post("/logout", (req, res) => {
   res.status(200).json({ message: "Logged out successfully" });
 });
 
-// ── Get all users (admin only: it exposes names and emails) ──────────────────
+// ── Get all users (admin only: names, emails, phone numbers, photos) ─────────
+// Users have no phone field of their own: the phone comes from their default
+// (or first) saved delivery address, otherwise from their most recent order.
+const DEFAULT_AVATAR = "pngall.com/wp-content/uploads/5/User-Profile-PNG";
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const users = await User.find().select("-password").sort({ createdAt: -1 });
-    res.status(200).json({ users });
+    const Order = require("../orders/ordersmodel");
+    const users = await User.find()
+      .select("name email role profilePicture bio profession addresses createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const ids = users.map((u) => String(u._id));
+    const emails = users.map((u) => u.email);
+    const orders = await Order.find({ $or: [{ userId: { $in: ids } }, { email: { $in: emails } }] })
+      .select("userId email customerInfo.phone createdAt")
+      .sort({ createdAt: -1 })
+      .limit(20000)
+      .lean();
+    const byUser = {};
+    for (const o of orders) {
+      const key = (o.userId && ids.includes(String(o.userId)) && String(o.userId)) || `email:${o.email}`;
+      byUser[key] = byUser[key] || { phone: o.customerInfo?.phone || "", count: 0 };
+      byUser[key].count += 1;
+    }
+
+    res.status(200).json({
+      users: users.map((u) => {
+        const addr = (u.addresses || []).find((a) => a.isDefault) || (u.addresses || [])[0];
+        const fromOrders = byUser[String(u._id)] || byUser[`email:${u.email}`];
+        const phone = addr?.phone || fromOrders?.phone || "";
+        return {
+          _id: u._id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          profilePicture: u.profilePicture && !u.profilePicture.includes(DEFAULT_AVATAR) ? u.profilePicture : "",
+          bio: u.bio || "",
+          profession: u.profession || "",
+          phone,
+          phoneSource: addr?.phone ? "address" : fromOrders?.phone ? "order" : "",
+          city: [addr?.city, addr?.state].filter(Boolean).join(", "),
+          orders: fromOrders?.count || 0,
+          createdAt: u.createdAt,
+        };
+      }),
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("List users error:", error);
+    res.status(500).json({ message: "Failed to load users" });
   }
 });
 
