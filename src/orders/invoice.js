@@ -1,7 +1,11 @@
 // Builds a one-page PDF invoice for an order and returns it as a Buffer.
-// Seller details come from .env (all optional):
-//   SELLER_NAME, SELLER_ADDRESS, SELLER_PHONE, SELLER_EMAIL, SELLER_GSTIN
+// Company name, address and logo come from src/utils/company.js (overridable in .env).
+const fs = require("fs");
 const PDFDocument = require("pdfkit");
+const company = require("../utils/company");
+
+const BRAND = "#0891B2"; // teal from the logo
+const hasLogo = fs.existsSync(company.logoPath);
 
 // The built-in PDF fonts have no ₹ glyph, so amounts use "Rs."
 const money = (n) =>
@@ -20,33 +24,33 @@ const generateInvoicePdf = (order) =>
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    const seller = {
-      name: process.env.SELLER_NAME || "Food Pharma Machinery",
-      address: process.env.SELLER_ADDRESS || "",
-      phone: process.env.SELLER_PHONE || "",
-      email: process.env.SELLER_EMAIL || process.env.SMTP_USER || "",
-      gstin: process.env.SELLER_GSTIN || "",
-    };
+    const seller = company;
     const { customerInfo = {}, shippingAddress = {}, items = [] } = order;
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    // ── Header ──
-    doc.fontSize(20).font("Helvetica-Bold").fillColor("#1a1a1a").text(seller.name, left, 48);
+    // ── Header: logo, company name and address on the left, invoice details on the right ──
+    doc.rect(0, 0, doc.page.width, 6).fill(BRAND);
+    const logoSize = 58;
+    const textLeft = hasLogo ? left + logoSize + 12 : left;
+    if (hasLogo) doc.image(company.logoPath, left, 44, { width: logoSize, height: logoSize });
+    const headWidth = width * 0.58 - (textLeft - left);
+    doc.fontSize(16).font("Helvetica-Bold").fillColor("#0F172A").text(seller.name, textLeft, 46, { width: headWidth });
     doc.fontSize(9).font("Helvetica").fillColor("#555");
     [seller.address, seller.phone && `Phone: ${seller.phone}`, seller.email, seller.gstin && `GSTIN: ${seller.gstin}`]
       .filter(Boolean)
-      .forEach((line) => doc.text(line));
+      .forEach((line) => doc.text(line, textLeft, undefined, { width: headWidth }));
+    const headerBottom = Math.max(doc.y, 44 + logoSize);
 
-    doc.fontSize(22).font("Helvetica-Bold").fillColor("#4CAF50").text("INVOICE", left, 48, { width, align: "right" });
+    doc.fontSize(22).font("Helvetica-Bold").fillColor(BRAND).text("INVOICE", left, 46, { width, align: "right" });
     doc.fontSize(9).font("Helvetica").fillColor("#333")
       .text(`Invoice no: ${order.orderId}`, left, 76, { width, align: "right" })
       .text(`Date: ${formatDate(order.orderDate || order.createdAt)}`, { width, align: "right" })
       .text(`Payment: ${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod} (${order.paymentStatus})`, { width, align: "right" });
 
     // ── Bill to ──
-    let y = Math.max(doc.y, 130) + 16;
+    let y = Math.max(doc.y, headerBottom, 130) + 16;
     doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").stroke();
     y += 12;
     doc.fontSize(10).font("Helvetica-Bold").fillColor("#1a1a1a").text("Bill to / Ship to", left, y);
@@ -104,11 +108,14 @@ const generateInvoicePdf = (order) =>
     totalRow("Total", money(order.totalAmount), true);
 
     // ── Footer ──
-    doc.fontSize(8).font("Helvetica").fillColor("#888")
-      .text("Thank you for your business. This is a computer-generated invoice.", left, doc.page.height - 80, {
-        width,
-        align: "center",
-      });
+    const footY = doc.page.height - 112; // last line must stay inside the bottom margin or PDFKit adds a page
+    doc.moveTo(left, footY).lineTo(right, footY).strokeColor("#ddd").stroke();
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#0F172A")
+      .text(seller.name, left, footY + 10, { width, align: "center", lineBreak: false });
+    doc.fontSize(8).font("Helvetica").fillColor("#666")
+      .text([seller.address, seller.website.replace(/^https?:\/\//, "")].filter(Boolean).join("  |  "), left, footY + 24, { width, align: "center", lineBreak: false })
+      .fillColor("#888")
+      .text("Thank you for your business. This is a computer-generated invoice.", left, footY + 38, { width, align: "center", lineBreak: false });
 
     doc.end();
   });

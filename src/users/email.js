@@ -1,6 +1,7 @@
 // services/email.js
 const nodemailer = require('nodemailer');
 const { generateInvoicePdf } = require('../orders/invoice');
+const company = require('../utils/company');
 
 // ─── SMTP Transporter with connection pooling ───
 const transporter = nodemailer.createTransport({
@@ -147,6 +148,21 @@ const esc = (value) =>
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 
+// Company logo + name across the top, and name + address at the bottom, of customer order emails
+const brandHeader = () => `
+        <tr><td style="padding:18px 28px;background:#0F172A;border-radius:10px 10px 0 0;font-family:Arial,sans-serif;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="vertical-align:middle;padding-right:12px;"><img src="${company.logoUrl}" width="44" height="44" alt="${esc(company.name)} logo" style="display:block;border:0;" /></td>
+            <td style="vertical-align:middle;color:#ffffff;font-size:18px;font-weight:bold;line-height:1.2;">${esc(company.name)}</td>
+          </tr></table>
+        </td></tr>`;
+const brandFooter = () => `
+        <tr><td style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;border-radius:0 0 10px 10px;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;color:#666;text-align:center;">
+          <strong style="color:#0F172A;">${esc(company.name)}</strong><br/>
+          ${esc(company.address)}<br/>
+          ${company.phone ? `Phone: ${esc(company.phone)} · ` : ''}<a href="${company.website}" style="color:#0891B2;text-decoration:none;">${company.website.replace(/^https?:\/\//, '')}</a>
+        </td></tr>`;
+
 const inr = (amount) => `₹${Number(amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 const sendOrderConfirmationEmail = (order) => {
@@ -216,7 +232,7 @@ const sendOrderConfirmationEmail = (order) => {
 <body style="margin:0;padding:0;background:#f4f4f4;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">
     <tr><td align="center" style="padding:16px 8px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:10px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:10px;">${brandHeader()}
         <tr><td class="wrap" style="padding:28px;font-family:Arial,sans-serif;color:#333;font-size:14px;line-height:1.5;">
           <h2 class="title" style="color:#4CAF50;margin:0 0 8px;font-size:24px;">Thank you for your order, ${esc(customerInfo.firstName) || 'there'}!</h2>
           <p style="margin:0 0 16px;">We've received your order and it's now being processed.</p>
@@ -247,7 +263,7 @@ const sendOrderConfirmationEmail = (order) => {
             ${button(shopUrl, 'Continue shopping', '#1a73e8')}
           </div>
           <p style="margin:24px 0 0;color:#777;font-size:13px;text-align:center;">Your invoice is attached as a PDF. We'll email you whenever your order status changes. Thanks for shopping with us!</p>
-        </td></tr>
+        </td></tr>${brandFooter()}
       </table>
     </td></tr>
   </table>
@@ -337,7 +353,7 @@ const sendOrderStatusEmail = (order) => {
 <body style="margin:0;padding:0;background:#f4f4f4;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">
     <tr><td align="center" style="padding:16px 8px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:10px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:10px;">${brandHeader()}
         <tr><td style="padding:28px;font-family:Arial,sans-serif;color:#333;font-size:14px;line-height:1.5;">
           <h2 style="color:${tpl.color};margin:0 0 8px;font-size:22px;">${esc(tpl.heading)}</h2>
           <p style="margin:0 0 16px;">Hi ${name},</p>
@@ -353,7 +369,7 @@ const sendOrderStatusEmail = (order) => {
             <a href="${trackUrl(order.orderId)}" style="display:inline-block;padding:12px 22px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">View order status</a>
           </div>
           <p style="margin:24px 0 0;color:#777;font-size:13px;text-align:center;">Questions? Just reply to this email.</p>
-        </td></tr>
+        </td></tr>${brandFooter()}
       </table>
     </td></tr>
   </table>
