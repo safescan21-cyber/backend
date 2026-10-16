@@ -364,7 +364,67 @@ const sendOrderStatusEmail = (order) => {
   return true;
 };
 
+// Bulk quote request: notify the business and confirm to the customer
+const sendBulkQuoteEmails = (quote) => {
+  const c = quote.contact || {};
+  const rows = (quote.items || []).map((i) => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #eee;">${esc(i.name)}</td>
+        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">${esc(i.quantity)}</td>
+        <td style="padding:8px;border-bottom:1px solid #eee;color:#666;">${esc(i.notes)}</td>
+      </tr>`).join('');
+  const table = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:12px 0;">
+      <tr style="background:#f5f5f5;"><th style="padding:8px;text-align:left;">Product</th><th style="padding:8px;">Qty</th><th style="padding:8px;text-align:left;">Notes</th></tr>
+      ${rows}
+    </table>`;
+  const where = [quote.deliveryCity, quote.deliveryState, quote.country].filter(Boolean).map(esc).join(', ');
+  const by = quote.requiredBy ? new Date(quote.requiredBy).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : '';
+  const wrap = (inner) => `<!DOCTYPE html><html><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+<body style="margin:0;padding:16px 8px;background:#f4f4f4;"><div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;padding:24px;font-family:Arial,sans-serif;color:#333;font-size:14px;line-height:1.5;">${inner}</div></body></html>`;
+
+  // To the business
+  const adminTo = process.env.QUOTE_TO || process.env.CONTACT_EMAIL || process.env.SMTP_USER;
+  if (adminTo) {
+    emailQueue.add(() => transporter.sendMail({
+      from,
+      to: adminTo,
+      replyTo: c.email,
+      subject: `New bulk quote ${quote.quoteNumber} — ${quote.items.length} item(s)${c.company ? ` from ${c.company}` : ''}`,
+      html: wrap(`
+        <h2 style="margin-top:0;color:#e65100;">New bulk quote request</h2>
+        <p><strong>${esc(quote.quoteNumber)}</strong></p>
+        <p>
+          <strong>Name:</strong> ${esc(c.name)}<br/>
+          ${c.company ? `<strong>Company:</strong> ${esc(c.company)}<br/>` : ''}
+          <strong>Email:</strong> <a href="mailto:${esc(c.email)}">${esc(c.email)}</a><br/>
+          <strong>Phone:</strong> <a href="tel:${esc(c.phone)}">${esc(c.phone)}</a><br/>
+          ${c.gstin ? `<strong>GSTIN:</strong> ${esc(c.gstin)}<br/>` : ''}
+          ${where ? `<strong>Deliver to:</strong> ${where}<br/>` : ''}
+          ${by ? `<strong>Needed by:</strong> ${by}<br/>` : ''}
+        </p>
+        ${table}
+        ${quote.message ? `<p style="white-space:pre-wrap;background:#f8f8f8;padding:12px;border-radius:6px;">${esc(quote.message)}</p>` : ''}
+        <p><a href="${frontendUrl}/dashboard/bulk-quotes" style="display:inline-block;padding:10px 18px;background:#e65100;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Open in dashboard</a></p>`),
+    }));
+  }
+
+  // To the customer
+  emailQueue.add(() => transporter.sendMail({
+    from,
+    to: c.email,
+    subject: `We received your bulk quote request ${quote.quoteNumber}`,
+    html: wrap(`
+      <h2 style="margin-top:0;color:#4CAF50;">Thanks, ${esc(c.name)}!</h2>
+      <p>We've received your bulk quote request <strong>${esc(quote.quoteNumber)}</strong>. Our team will review it and send you pricing and availability, usually within 1 business day.</p>
+      ${table}
+      <p style="color:#777;font-size:13px;">Need to add something? Just reply to this email and mention ${esc(quote.quoteNumber)}.</p>`),
+  }));
+  return true;
+};
+
 module.exports = {
+  sendBulkQuoteEmails,
   sendResetEmail,
   sendWelcomeEmail,
   sendSubscriptionEmail,

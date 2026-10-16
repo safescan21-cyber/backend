@@ -31,6 +31,7 @@ const newsletterRoutes = require("./src/news/newsletterRoutes");
 const insightsRoutes = require("./src/insights/insightsRoutes");
 const offerRoutes = require("./src/offers/offerRoutes");
 const seoRoutes = require("./src/seo/seoRoutes");
+const bulkQuoteRoutes = require("./src/quotes/bulkQuoteRoutes");
 const contactRoutes = require("./src/contact/contactRoutes");
 const quoteRoutes = require("./src/users/Quoteroutes");
 
@@ -121,6 +122,7 @@ app.use("/api/press", pressRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use("/api/offers", offerRoutes);
+app.use("/api/bulk-quotes", bulkQuoteRoutes);
 app.use("/", seoRoutes); // /sitemap-content.xml
 // Image/video uploads (login required). Also mounted at "/" so older frontend
 // calls to /uploadImages keep working until they are updated.
@@ -232,6 +234,7 @@ const shutdown = async (signal) => {
   console.log(`${signal} received, shutting down...`);
   httpServer.close(async () => {
     try {
+      await visitTracker.flush(); // save buffered visits before closing the database
       await mongoose.connection.close();
       console.log("MongoDB connection closed through app termination");
     } finally {
