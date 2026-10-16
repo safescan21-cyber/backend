@@ -44,7 +44,7 @@ const sendQuoteEmails = (quote) => {
   try {
     sendBulkQuoteEmails(quote, {
       onAdminSent: () => record({ "emails.adminSentAt": new Date(), "emails.error": "" }),
-      onCustomerSent: () => record({ "emails.customerSentAt": new Date() }),
+      onCustomerSent: (messageId) => record({ "emails.customerSentAt": new Date(), "emails.customerMessageId": String(messageId || "") }),
       onError: (msg) => {
         console.error(`Bulk quote ${quote.quoteNumber}: ${msg}`);
         record({ "emails.error": msg.slice(0, 300) });

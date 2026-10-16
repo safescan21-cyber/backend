@@ -406,15 +406,41 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
         ${quote.message ? `<p style="white-space:pre-wrap;background:#f8f8f8;padding:12px;border-radius:6px;">${esc(quote.message)}</p>` : ''}
         <p><a href="${frontendUrl}/dashboard/bulk-quotes" style="display:inline-block;padding:10px 18px;background:#e65100;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Open in dashboard</a></p>`),
   };
+  // Plain-text twin of the item list (emails with a text part are less likely to land in spam)
+  const itemsText = (quote.items || []).map((i) => `- ${i.name} x ${i.quantity}${i.notes ? ` (${i.notes})` : ''}`).join('\n');
+  const supportPhone = process.env.SUPPORT_PHONE || '+91 87007 92607';
+  const supportEmail = process.env.SMTP_USER || '';
   const customerMail = {
     from,
     to: c.email,
-    subject: `We received your bulk quote request ${quote.quoteNumber}`,
+    replyTo: adminTo || supportEmail,
+    subject: `Thank you for your enquiry ${quote.quoteNumber} - we will contact you soon`,
+    text: [
+      `Dear ${c.name},`,
+      '',
+      `Thank you for contacting Food Pharma Machinery. We have received your bulk quote request ${quote.quoteNumber}.`,
+      '',
+      'Our team will connect with you soon (usually within 1 business day) by phone or email with pricing and availability.',
+      '',
+      'Your request:',
+      itemsText,
+      '',
+      `Need to add something? Reply to this email or call us on ${supportPhone}.`,
+      '',
+      'Regards,',
+      'Team Food Pharma Machinery',
+      frontendUrl,
+    ].join('\n'),
     html: wrap(`
-      <h2 style="margin-top:0;color:#4CAF50;">Thanks, ${esc(c.name)}!</h2>
-      <p>We've received your bulk quote request <strong>${esc(quote.quoteNumber)}</strong>. Our team will review it and send you pricing and availability, usually within 1 business day.</p>
+      <h2 style="margin-top:0;color:#2e7d32;">Thank you for contacting us, ${esc(c.name)}!</h2>
+      <p>We have received your bulk quote request <strong>${esc(quote.quoteNumber)}</strong>.</p>
+      <p style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:12px;border-radius:4px;">
+        <strong>Our team will connect with you soon</strong> — usually within 1 business day — by phone or email with pricing and availability.
+      </p>
+      <p style="margin-bottom:4px;"><strong>Your request</strong></p>
       ${table}
-      <p style="color:#777;font-size:13px;">Need to add something? Just reply to this email and mention ${esc(quote.quoteNumber)}.</p>`),
+      <p>Need to add something? Simply reply to this email or call us on <a href="tel:${esc(supportPhone.replace(/\s/g, ''))}">${esc(supportPhone)}</a>.</p>
+      <p>Regards,<br/><strong>Team Food Pharma Machinery</strong><br/><a href="${frontendUrl}">${frontendUrl.replace(/^https?:\/\//, '')}</a></p>`),
   };
 
   // One ordered task: the customer is only told "we received it" once the
@@ -427,7 +453,8 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        await transporter.sendMail(adminMail);
+        const adminInfo = await transporter.sendMail(adminMail);
+        console.log(`Bulk quote ${quote.quoteNumber}: business email accepted (${adminInfo.messageId})`);
         lastError = null;
         break;
       } catch (err) {
@@ -442,8 +469,9 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
     await hooks.onAdminSent?.();
 
     try {
-      await transporter.sendMail(customerMail);
-      await hooks.onCustomerSent?.();
+      const info = await transporter.sendMail(customerMail);
+      console.log(`Bulk quote ${quote.quoteNumber}: customer confirmation accepted for ${c.email} (${info.messageId})`);
+      await hooks.onCustomerSent?.(info.messageId);
     } catch (err) {
       hooks.onError?.(`Customer confirmation failed: ${err.message}`);
       throw err;

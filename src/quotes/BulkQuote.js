@@ -42,6 +42,7 @@ const bulkQuoteSchema = new mongoose.Schema(
     emails: {
       adminSentAt:    { type: Date },
       customerSentAt: { type: Date },
+      customerMessageId: { type: String, default: "" }, // Gmail's receipt for the confirmation
       error:          { type: String, default: "" },
     },
   },
