@@ -37,6 +37,13 @@ const bulkQuoteSchema = new mongoose.Schema(
       index: true,
     },
     adminNotes:  { type: String, default: "", maxlength: 3000 },
+
+    // Email delivery: the customer confirmation is sent only after the business email
+    emails: {
+      adminSentAt:    { type: Date },
+      customerSentAt: { type: Date },
+      error:          { type: String, default: "" },
+    },
   },
   { timestamps: true }
 );

@@ -36,6 +36,25 @@ const newQuoteNumber = async () => {
   return `BQ-${day}-${Date.now().toString().slice(-6)}`;
 };
 
+// Business email first; the customer confirmation only after it succeeds.
+// Delivery times / errors are saved on the quote for the admin page.
+const sendQuoteEmails = (quote) => {
+  const id = quote._id;
+  const record = (fields) => BulkQuote.updateOne({ _id: id }, { $set: fields }).catch(() => {});
+  try {
+    sendBulkQuoteEmails(quote, {
+      onAdminSent: () => record({ "emails.adminSentAt": new Date(), "emails.error": "" }),
+      onCustomerSent: () => record({ "emails.customerSentAt": new Date() }),
+      onError: (msg) => {
+        console.error(`Bulk quote ${quote.quoteNumber}: ${msg}`);
+        record({ "emails.error": msg.slice(0, 300) });
+      },
+    });
+  } catch (mailError) {
+    console.error("Bulk quote email failed:", mailError.message);
+  }
+};
+
 router.post("/", optionalAuth, async (req, res) => {
   try {
     const b = req.body || {};
@@ -91,11 +110,7 @@ router.post("/", optionalAuth, async (req, res) => {
       source: ["navbar", "cart", "product"].includes(b.source) ? b.source : "other",
     });
 
-    try {
-      sendBulkQuoteEmails(quote);
-    } catch (mailError) {
-      console.error("Bulk quote email failed:", mailError.message);
-    }
+    sendQuoteEmails(quote);
 
     res.status(201).json({ success: true, quoteNumber: quote.quoteNumber });
   } catch (error) {
@@ -109,7 +124,7 @@ router.get("/mine", verifyToken, async (req, res) => {
     const me = await User.findById(req.userId).select("email").lean().catch(() => null);
     const or = [{ userId: String(req.userId) }];
     if (me?.email) or.push({ "contact.email": me.email.toLowerCase() });
-    const quotes = await BulkQuote.find({ $or: or }).select("-adminNotes").sort({ createdAt: -1 }).limit(100).lean();
+    const quotes = await BulkQuote.find({ $or: or }).select("-adminNotes -emails.error").sort({ createdAt: -1 }).limit(100).lean();
     res.json({ quotes });
   } catch (error) {
     res.status(500).json({ message: "Could not load your quote requests" });
@@ -148,6 +163,19 @@ router.patch("/:id", verifyToken, verifyAdmin, async (req, res) => {
     res.json({ quote });
   } catch (error) {
     res.status(500).json({ message: "Could not update the quote request" });
+  }
+});
+
+// Admin: try the emails again (e.g. after fixing the Gmail password)
+router.post("/:id/resend-emails", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const quote = await BulkQuote.findById(req.params.id).catch(() => null);
+    if (!quote) return res.status(404).json({ message: "Quote request not found" });
+    await BulkQuote.updateOne({ _id: quote._id }, { $set: { "emails.error": "", "emails.adminSentAt": null, "emails.customerSentAt": null } });
+    sendQuoteEmails(quote);
+    res.json({ message: "Emails queued. The customer is emailed once your copy has been sent." });
+  } catch (error) {
+    res.status(500).json({ message: "Could not resend the emails" });
   }
 });
 

@@ -364,8 +364,9 @@ const sendOrderStatusEmail = (order) => {
   return true;
 };
 
-// Bulk quote request: notify the business and confirm to the customer
-const sendBulkQuoteEmails = (quote) => {
+// Bulk quote request: notify the business first, then confirm to the customer
+// hooks: { onAdminSent, onCustomerSent, onError } — used to record delivery on the quote
+const sendBulkQuoteEmails = (quote, hooks = {}) => {
   const c = quote.contact || {};
   const rows = (quote.items || []).map((i) => `
       <tr>
@@ -383,15 +384,13 @@ const sendBulkQuoteEmails = (quote) => {
   const wrap = (inner) => `<!DOCTYPE html><html><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
 <body style="margin:0;padding:16px 8px;background:#f4f4f4;"><div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;padding:24px;font-family:Arial,sans-serif;color:#333;font-size:14px;line-height:1.5;">${inner}</div></body></html>`;
 
-  // To the business
   const adminTo = process.env.QUOTE_TO || process.env.CONTACT_EMAIL || process.env.SMTP_USER;
-  if (adminTo) {
-    emailQueue.add(() => transporter.sendMail({
-      from,
-      to: adminTo,
-      replyTo: c.email,
-      subject: `New bulk quote ${quote.quoteNumber} — ${quote.items.length} item(s)${c.company ? ` from ${c.company}` : ''}`,
-      html: wrap(`
+  const adminMail = {
+    from,
+    to: adminTo,
+    replyTo: c.email,
+    subject: `New bulk quote ${quote.quoteNumber} — ${quote.items.length} item(s)${c.company ? ` from ${c.company}` : ''}`,
+    html: wrap(`
         <h2 style="margin-top:0;color:#e65100;">New bulk quote request</h2>
         <p><strong>${esc(quote.quoteNumber)}</strong></p>
         <p>
@@ -406,11 +405,8 @@ const sendBulkQuoteEmails = (quote) => {
         ${table}
         ${quote.message ? `<p style="white-space:pre-wrap;background:#f8f8f8;padding:12px;border-radius:6px;">${esc(quote.message)}</p>` : ''}
         <p><a href="${frontendUrl}/dashboard/bulk-quotes" style="display:inline-block;padding:10px 18px;background:#e65100;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Open in dashboard</a></p>`),
-    }));
-  }
-
-  // To the customer
-  emailQueue.add(() => transporter.sendMail({
+  };
+  const customerMail = {
     from,
     to: c.email,
     subject: `We received your bulk quote request ${quote.quoteNumber}`,
@@ -419,7 +415,40 @@ const sendBulkQuoteEmails = (quote) => {
       <p>We've received your bulk quote request <strong>${esc(quote.quoteNumber)}</strong>. Our team will review it and send you pricing and availability, usually within 1 business day.</p>
       ${table}
       <p style="color:#777;font-size:13px;">Need to add something? Just reply to this email and mention ${esc(quote.quoteNumber)}.</p>`),
-  }));
+  };
+
+  // One ordered task: the customer is only told "we received it" once the
+  // business email has really been sent (tried up to 3 times).
+  emailQueue.add(async () => {
+    if (!adminTo) {
+      hooks.onError?.('No business email address is set (QUOTE_TO / SMTP_USER)');
+      return;
+    }
+    let lastError = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await transporter.sendMail(adminMail);
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 5000));
+      }
+    }
+    if (lastError) {
+      hooks.onError?.(`Business email failed: ${lastError.message}`);
+      throw lastError;
+    }
+    await hooks.onAdminSent?.();
+
+    try {
+      await transporter.sendMail(customerMail);
+      await hooks.onCustomerSent?.();
+    } catch (err) {
+      hooks.onError?.(`Customer confirmation failed: ${err.message}`);
+      throw err;
+    }
+  });
   return true;
 };
 
