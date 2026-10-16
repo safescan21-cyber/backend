@@ -2,6 +2,8 @@
 //   POST /api/insights/track            (public; the site sends events only after analytics consent)
 //   GET  /api/insights/summary?days=30  (admin)
 //   GET  /api/insights/customer/:userId (admin)
+//   DELETE /api/insights/customer/:userId  (admin) delete a customer's tracked activity
+//   DELETE /api/insights/visitor/:visitorId (admin) delete an anonymous visitor's activity
 const router = require("express").Router();
 const ActivityEvent = require("./ActivityEvent");
 const User = require("../users/Usermodel");
@@ -181,6 +183,7 @@ router.get("/summary", verifyToken, verifyAdmin, async (req, res) => {
         at: e.createdAt,
         who: e.userId ? userMap[e.userId]?.name || userMap[e.userId]?.email || "Customer" : `Visitor ${e.visitorId.slice(0, 6)}`,
         userId: e.userId,
+        visitorId: e.visitorId, // lets the admin delete an anonymous visitor's activity
         path: e.path,
         productId: e.productId,
         productName: e.productName,
@@ -241,6 +244,36 @@ router.get("/customer/:userId", verifyToken, verifyAdmin, async (req, res) => {
   } catch (error) {
     console.error("Customer insights error:", error);
     res.status(500).json({ message: "Failed to load customer" });
+  }
+});
+
+// Delete everything tracked about a customer: their activity while logged in, and
+// what the same browsers recorded before they logged in. Their account and orders stay.
+router.delete("/customer/:userId", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const userId = String(req.params.userId);
+    if (!/^[a-f0-9]{24}$/i.test(userId)) return res.status(400).json({ message: "Invalid customer ID" });
+    const visitorIds = await ActivityEvent.distinct("visitorId", { userId });
+    const { deletedCount } = await ActivityEvent.deleteMany({ $or: [{ userId }, { visitorId: { $in: visitorIds } }] });
+    console.log(`Insights: admin ${req.userId || ""} deleted ${deletedCount} activity records of customer ${userId}`);
+    res.json({ message: "Customer activity deleted", deleted: deletedCount });
+  } catch (error) {
+    console.error("Delete customer insights error:", error);
+    res.status(500).json({ message: "Failed to delete customer activity" });
+  }
+});
+
+// Delete an anonymous visitor's activity (the random ID their browser was given)
+router.delete("/visitor/:visitorId", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const visitorId = String(req.params.visitorId);
+    if (!/^[\w-]{6,100}$/.test(visitorId)) return res.status(400).json({ message: "Invalid visitor ID" });
+    const { deletedCount } = await ActivityEvent.deleteMany({ visitorId });
+    console.log(`Insights: admin ${req.userId || ""} deleted ${deletedCount} activity records of visitor ${visitorId.slice(0, 8)}…`);
+    res.json({ message: "Visitor activity deleted", deleted: deletedCount });
+  } catch (error) {
+    console.error("Delete visitor insights error:", error);
+    res.status(500).json({ message: "Failed to delete visitor activity" });
   }
 });
 
