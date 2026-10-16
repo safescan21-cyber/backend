@@ -7,6 +7,8 @@ const router = require("express").Router();
 const Offer = require("./Offer");
 const { verifyToken, verifyAdmin } = require("../middlewere/authMiddleware");
 const { evaluateCoupon } = require("./coupon");
+const { cacheGet, clearOnWrite } = require("../utils/cache");
+router.use(clearOnWrite);
 
 const FIELDS = ["title", "subtitle", "discountText", "code", "ctaText", "ctaLink", "theme", "startsAt", "endsAt", "isActive", "priority",
   "discountType", "discountValue", "minOrderAmount", "maxDiscount"];
@@ -34,7 +36,7 @@ router.post("/validate-code", async (req, res) => {
   }
 });
 
-router.get("/active", async (req, res) => {
+router.get("/active", cacheGet(30000), async (req, res) => {
   try {
     const now = new Date();
     const offers = await Offer.find({

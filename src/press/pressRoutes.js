@@ -8,6 +8,10 @@ const User = require('../users/Usermodel'); // assume User model exists
 const PressRelease = require('./PressRelease');
 require('dotenv').config();
 const { pingIndexNow } = require('../utils/indexnow');
+const { cacheGet, clearOnWrite } = require('../utils/cache');
+
+// Any admin change empties the cached public lists
+router.use(clearOnWrite);
 
 // ─── Cloudinary configuration ───────────────────────────────────
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -188,7 +192,7 @@ router.post('/', authAdmin, upload.array('media', 10), async (req, res) => {
 // GET all (with pagination & filtering)
 // Public-safe: guests get active-only results; logged-in admins can
 // pass active=false (or omit it) to see everything.
-router.get('/', optionalAdmin, async (req, res) => {
+router.get('/', cacheGet(30000), optionalAdmin, async (req, res) => {
   try {
     const { active } = req.query;
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 100);

@@ -5,6 +5,10 @@ const Products = require('../products/productsmodel');
 const { verifyToken, verifyAdmin } = require('../middlewere/authMiddleware');
 const Reviews = require('../review/reviewsmodel');
 const { pingIndexNow } = require("../utils/indexnow");
+const { cacheGet, clearOnWrite } = require("../utils/cache");
+
+// Any admin change empties the cached public lists
+router.use(clearOnWrite);
 
 // ============ CREATE PRODUCT (ADMIN ONLY) ============
 router.post("/create-product", verifyToken, verifyAdmin, async (req, res) => {
@@ -28,7 +32,7 @@ router.post("/create-product", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
+router.get("/", cacheGet(30000), async (req, res) => {
   try {
     const {
       category,
