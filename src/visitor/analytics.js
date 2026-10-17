@@ -224,4 +224,26 @@ router.get('/visitors', verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+// Delete a visitor's records (admin). For a logged-in visitor, ?account=1 also
+// deletes every visit linked to their account (from any browser).
+router.delete('/visitors/:visitorId', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const visitorId = String(req.params.visitorId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(visitorId)) {
+      return res.status(400).json({ message: 'Invalid visitor ID' });
+    }
+    const or = [{ visitorId }];
+    if (req.query.account === '1') {
+      const userIds = (await Visit.distinct('userId', { visitorId })).filter((id) => /^[a-f0-9]{24}$/i.test(id || ''));
+      if (userIds.length) or.push({ userId: { $in: userIds } });
+    }
+    const { deletedCount } = await Visit.deleteMany({ $or: or });
+    console.log(`Visitors: admin ${req.userId || ''} deleted ${deletedCount} visit records (visitor ${visitorId.slice(0, 8)}…${or.length > 1 ? ' + account' : ''})`);
+    res.json({ message: 'Visitor records deleted', deleted: deletedCount });
+  } catch (error) {
+    console.error('Delete visitor error:', error);
+    res.status(500).json({ message: 'Failed to delete visitor records' });
+  }
+});
+
 module.exports = router;
