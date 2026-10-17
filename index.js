@@ -40,6 +40,13 @@ const port = process.env.PORT || 3000;
 const host = process.env.HOST || "0.0.0.0";
 const isProd = process.env.NODE_ENV === "production";
 
+// Login tokens are signed with JWT_SECRET. Without it the code would fall back to
+// a publicly known key and anyone could forge an admin login, so refuse to start.
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET is not set. Add it to .env before starting the API.");
+  process.exit(1);
+}
+
 // ── Behind Nginx: trust the proxy so req.ip, secure cookies, and
 //    visitTracker see the real client IP / protocol ─────────────────────
 app.set("trust proxy", 1);

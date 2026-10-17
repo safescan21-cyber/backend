@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Subscriber = require('./Subscriber');
 const { sendSubscriptionEmail } = require('../users/email');
+const { tooMany } = require('../utils/rateLimit');
 const { verifyToken, verifyAdmin } = require('../middlewere/authMiddleware');
 const crypto = require('crypto');
 
@@ -23,6 +24,13 @@ const sendConfirmationSafely = (email, url) => {
 // ── Subscribe (no login required) ──
 router.post('/subscribe', async (req, res) => {
   try {
+    // Each new sign-up sends a confirmation email: stop scripts using us to spam
+    if (tooMany(`newsletter:${req.ip}`, 5, 60 * 60 * 1000)) {
+      return res.status(429).json({ message: 'Too many sign-ups from your network. Please try again later.' });
+    }
+    if (typeof req.body?.email !== 'string') {
+      return res.status(400).json({ message: 'Please enter a valid email address.' });
+    }
     const email = String(req.body?.email || '').toLowerCase().trim();
 
     if (!email) {

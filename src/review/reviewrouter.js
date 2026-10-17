@@ -4,6 +4,7 @@ const Reviews = require("./reviewsmodel");
 const User = require("../users/Usermodel");
 const Products = require("../products/productsmodel");
 const { verifyToken, verifyAdmin, optionalAuth } = require("../middlewere/authMiddleware");
+const { tooMany } = require("../utils/rateLimit");
 const router = express.Router();
 
 const clean = (text, max) => String(text || "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -47,6 +48,13 @@ router.post("/post-review", optionalAuth, async (req, res) => {
 
     if (!comment || !productId || !(rating >= 1 && rating <= 5)) {
       return res.status(400).send({ message: "Please add a rating and a comment" });
+    }
+    if (typeof productId !== "string" || !/^[a-f0-9]{24}$/i.test(productId)) {
+      return res.status(400).send({ message: "Unknown product" });
+    }
+    // Logged-in customers have one review per product; guests are limited per network
+    if (!req.userId && tooMany(`review:${req.ip}`, 5, 15 * 60 * 1000)) {
+      return res.status(429).send({ message: "Too many reviews from your network. Please try again later." });
     }
 
     if (req.userId) {

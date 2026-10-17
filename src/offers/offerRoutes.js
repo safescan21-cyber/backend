@@ -27,6 +27,9 @@ const pick = (body) => {
 // The final discount is always recalculated when the order is saved.
 router.post("/validate-code", async (req, res) => {
   try {
+    if (typeof req.body?.code !== "string" || req.body.code.length > 50) {
+      return res.status(400).json({ valid: false, discount: 0, message: "Please enter a coupon code." });
+    }
     const subtotal = Math.max(0, Number(req.body?.subtotal) || 0);
     const result = await evaluateCoupon(req.body?.code, subtotal);
     res.status(200).json({ valid: result.valid, discount: result.discount, code: result.code, label: result.label, message: result.message });

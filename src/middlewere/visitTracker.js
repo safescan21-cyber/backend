@@ -3,6 +3,7 @@
 // Visits are buffered and saved in one insertMany every few seconds, so the
 // request never waits for the database and each batch costs one operation.
 const Visit = require('../visitor/Visitmodel');
+const { userFromRequest } = require('./authMiddleware');
 const crypto = require('crypto');
 
 const FLUSH_MS = 5000;
@@ -49,6 +50,7 @@ const visitTracker = (req, res, next) => {
     if (buffer.length < MAX_BUFFER) {
       buffer.push({
         visitorId: getVisitorId(req, res),
+        userId: userFromRequest(req)?.userId || null, // logged-in visitor (from their login token)
         ip: req.ip || req.connection?.remoteAddress || '0.0.0.0',
         userAgent: req.get('User-Agent') || 'unknown',
         page: req.originalUrl || req.url || '/',

@@ -92,4 +92,15 @@ const optionalAuth = (req, res, next) => {
   next();
 };
 
-module.exports = { verifyToken, verifyAdmin, optionalAuth };
+// Who is making this request, if anyone (never responds; null when not logged in)
+const userFromRequest = (req) => {
+  for (const token of getCandidateTokens(req)) {
+    try {
+      const decoded = jwt.verify(token, getSecret());
+      return { userId: String(decoded.userId || decoded.id || decoded._id || ''), role: decoded.role };
+    } catch { /* try the next token */ }
+  }
+  return null;
+};
+
+module.exports = { verifyToken, verifyAdmin, optionalAuth, userFromRequest };

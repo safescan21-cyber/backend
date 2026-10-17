@@ -61,13 +61,16 @@ router.get("/", cacheGet(30000), async (req, res) => {
       }
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // page ≥ 1, limit 1–1000 (negative or huge values used to crash the query)
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(1000, Math.max(1, parseInt(limit, 10) || 10));
+    const skip = (pageNum - 1) * limitNum;
     const totalProducts = await Products.countDocuments(filter);
-    const totalPages = Math.ceil(totalProducts / parseInt(limit));
+    const totalPages = Math.ceil(totalProducts / limitNum);
 
     const products = await Products.find(filter)
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(limitNum)
       .populate("author", "email")
       .sort({ createdAt: -1 });
 
@@ -81,6 +84,9 @@ router.get("/", cacheGet(30000), async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const productId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(404).send({ message: "Product not found" });
+    }
     const product = await Products.findById(productId).populate(
       "author",
       "email username"

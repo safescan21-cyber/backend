@@ -92,6 +92,9 @@ router.get("/verify/:paymentIntentId", async (req, res) => {
       orderId:      paymentIntent.metadata?.orderId || null,
     });
   } catch (error) {
+    if (error?.code === "resource_missing" || error?.statusCode === 404) {
+      return res.status(404).json({ message: "Payment not found" });
+    }
     console.error("Error verifying payment:", error);
     res.status(500).json({ message: "Failed to verify payment" });
   }

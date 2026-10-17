@@ -38,6 +38,7 @@ router.get('/', async (req, res) => {
 // ─── GET SINGLE JOB (Public) ──────────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
+    if (!/^[a-f0-9]{24}$/i.test(req.params.id)) return res.status(404).json({ message: 'Job not found' });
     const job = await Job.findById(req.params.id).populate('postedBy', 'name email');
     if (!job) return res.status(404).json({ message: 'Job not found' });
     res.status(200).json(job);
