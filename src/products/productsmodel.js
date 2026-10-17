@@ -5,6 +5,15 @@ const SpecificationSchema = new mongoose.Schema({
   value: { type: String, required: true, trim: true },
 }, { _id: false });
 
+// Technical documents (datasheets, manuals, drawings) stored on this server;
+// see src/documents/documentFiles.js
+const DocumentSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, maxlength: 120 },
+  file: { type: String, required: true, match: /^[a-f0-9]{32}\.[a-z]{3,4}$/ },
+  size: { type: Number, default: 0 },
+  type: { type: String, trim: true },
+}, { _id: false });
+
 const ProductSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -29,6 +38,7 @@ const ProductSchema = new mongoose.Schema(
     // Accuracy: "±0.02%", Output: "2mV/V") — free-form key/value pairs
     // so it works for any product category without a fixed schema.
     specifications: { type: [SpecificationSchema], default: [] },
+    documents: { type: [DocumentSchema], default: [] },
   },
   { timestamps: true }
 );

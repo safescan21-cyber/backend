@@ -13,3 +13,6 @@ src/serviceAccountKey.json
 # Logs
 *.log
 npm-debug.log*
+
+# Files uploaded through the admin (product documents) live only on the server
+uploads/documents/

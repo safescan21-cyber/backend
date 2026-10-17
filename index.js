@@ -135,6 +135,7 @@ app.use("/", seoRoutes); // /sitemap-content.xml
 // calls to /uploadImages keep working until they are updated.
 app.use("/api", uploadRoutes);
 app.use("/", uploadRoutes);
+app.use("/api", require("./src/documents/documentRoutes")); // product technical documents
 app.use("/api", contactRoutes);
 app.use("/api/quote", quoteRoutes);
 

@@ -6,6 +6,15 @@ const { verifyToken, verifyAdmin } = require('../middlewere/authMiddleware');
 const Reviews = require('../review/reviewsmodel');
 const { pingIndexNow } = require("../utils/indexnow");
 const { cacheGet, clearOnWrite } = require("../utils/cache");
+const { cleanDocuments } = require("../documents/documentFiles");
+
+// Only valid, uploaded documents are stored on a product
+const withCleanDocuments = (body) => {
+  const documents = cleanDocuments(body.documents);
+  const out = { ...body };
+  if (documents === undefined) delete out.documents; else out.documents = documents;
+  return out;
+};
 
 // Any admin change empties the cached public lists
 router.use(clearOnWrite);
@@ -13,7 +22,7 @@ router.use(clearOnWrite);
 // ============ CREATE PRODUCT (ADMIN ONLY) ============
 router.post("/create-product", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const newproduct = new Products({ ...req.body });
+    const newproduct = new Products(withCleanDocuments(req.body));
     const savedproduct = await newproduct.save();
 
     const reviews = await Reviews.find({ productId: savedproduct._id });
@@ -110,7 +119,7 @@ router.patch("/update-product/:id", verifyToken, verifyAdmin, async (req, res) =
     const productId = req.params.id;
     const updatedProduct = await Products.findByIdAndUpdate(
       productId,
-      { ...req.body },
+      withCleanDocuments(req.body),
       { new: true }
     );
 
