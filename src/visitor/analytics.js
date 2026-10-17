@@ -224,6 +224,31 @@ router.get('/visitors', verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Delete many visitors at once (admin; the page's "Delete selected").
+// Body: { visitorIds: [uuid, …] (max 200), includeAccounts: true|false }
+// includeAccounts also removes every visit linked to the same logged-in accounts.
+router.post('/visitors/delete-many', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const raw = Array.isArray(req.body?.visitorIds) ? req.body.visitorIds : [];
+    const visitorIds = [...new Set(raw.filter((id) => typeof id === 'string' && UUID.test(id)))];
+    if (!visitorIds.length) return res.status(400).json({ message: 'No valid visitors selected' });
+    if (visitorIds.length > 200) return res.status(400).json({ message: 'Select at most 200 visitors at a time' });
+    const or = [{ visitorId: { $in: visitorIds } }];
+    if (req.body?.includeAccounts === true) {
+      const userIds = (await Visit.distinct('userId', { visitorId: { $in: visitorIds } })).filter((id) => /^[a-f0-9]{24}$/i.test(id || ''));
+      if (userIds.length) or.push({ userId: { $in: userIds } });
+    }
+    const { deletedCount } = await Visit.deleteMany({ $or: or });
+    console.log(`Visitors: admin ${req.userId || ''} bulk-deleted ${deletedCount} visit records (${visitorIds.length} visitors${or.length > 1 ? ' + accounts' : ''})`);
+    res.json({ message: 'Visitor records deleted', deleted: deletedCount, visitors: visitorIds.length });
+  } catch (error) {
+    console.error('Bulk delete visitors error:', error);
+    res.status(500).json({ message: 'Failed to delete visitor records' });
+  }
+});
+
 // Delete a visitor's records (admin). For a logged-in visitor, ?account=1 also
 // deletes every visit linked to their account (from any browser).
 router.delete('/visitors/:visitorId', verifyToken, verifyAdmin, async (req, res) => {
