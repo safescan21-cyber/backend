@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose'); // ✅ added — needed for ObjectId validation
 const router = express.Router();
 const Products = require('../products/productsmodel');
-const { verifyToken, verifyAdmin } = require('../middlewere/authMiddleware');
+const { verifyToken, verifyAdmin, userFromRequest } = require('../middlewere/authMiddleware');
 const Reviews = require('../review/reviewsmodel');
 const { pingIndexNow } = require("../utils/indexnow");
 const { cacheGet, clearOnWrite } = require("../utils/cache");
@@ -13,8 +13,13 @@ const withCleanDocuments = (body) => {
   const documents = cleanDocuments(body.documents);
   const out = { ...body };
   if (documents === undefined) delete out.documents; else out.documents = documents;
+  for (const flag of ['active', 'sellOnline']) if (flag in out && typeof out[flag] !== 'boolean') delete out[flag];
   return out;
 };
+
+// Products the public may see (older products have no flag yet = visible)
+const VISIBLE = { active: { $ne: false } };
+const isAdminRequest = (req) => userFromRequest(req)?.role === 'admin';
 
 // Any admin change empties the cached public lists
 router.use(clearOnWrite);
@@ -52,7 +57,7 @@ router.get("/", cacheGet(30000), async (req, res) => {
       limit = 10,
     } = req.query;
 
-    const filter = {};
+    const filter = { ...VISIBLE };
 
     if (category && category !== "all") {
       filter.category = category;
@@ -90,6 +95,21 @@ router.get("/", cacheGet(30000), async (req, res) => {
   }
 });
 
+// ============ ADMIN: every product incl. hidden ones ============
+router.get("/admin/all", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const products = await Products.find()
+      .select("name price oldPrice images category stock active sellOnline createdAt")
+      .sort({ createdAt: -1 })
+      .limit(2000)
+      .lean();
+    res.status(200).send({ products, total: products.length });
+  } catch (error) {
+    console.error("Error fetching admin products:", error);
+    res.status(500).send({ message: "Failed to fetch products" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const productId = req.params.id;
@@ -100,7 +120,7 @@ router.get("/:id", async (req, res) => {
       "author",
       "email username"
     );
-    if (!product) {
+    if (!product || (product.active === false && !isAdminRequest(req))) {
       return res.status(404).send({ message: "Product not found" });
     }
     const reviews = await Reviews.find({ productId }).populate(
@@ -179,7 +199,7 @@ router.get("/related/:id", async (req, res) => {
 
     const titleRegex = terms.length > 0 ? new RegExp(terms.join("|"), "i") : null;
 
-    const query = { _id: { $ne: id } };
+    const query = { _id: { $ne: id }, ...VISIBLE };
     const orConditions = [];
     if (titleRegex) orConditions.push({ name: { $regex: titleRegex } });
     if (product.category) orConditions.push({ category: product.category });

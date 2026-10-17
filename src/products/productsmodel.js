@@ -39,6 +39,9 @@ const ProductSchema = new mongoose.Schema(
     // so it works for any product category without a fixed schema.
     specifications: { type: [SpecificationSchema], default: [] },
     documents: { type: [DocumentSchema], default: [] },
+    // Admin controls: hidden products are off the website; sellOnline false = enquiry only
+    active: { type: Boolean, default: true },
+    sellOnline: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

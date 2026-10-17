@@ -67,8 +67,9 @@ const priceLines = async (items = []) => {
       if (quantity < (api.minOrderQty || 1)) fail(`Minimum order for ${api.name} is ${api.minOrderQty} ${api.unit}.`);
       lines.push({ kind: "api", productId: id, name: api.name, price: api.unitPrice, quantity, unit: api.unit || "kg", image: api.images?.[0] || "", category: api.category || "", slug: api.slug });
     } else {
-      const p = await Products.findById(id).select("name price images category").lean();
-      if (!p || !(Number(p.price) > 0)) fail("One of the items in your cart is no longer available. Please remove it and try again.");
+      const p = await Products.findById(id).select("name price images category active sellOnline").lean();
+      if (!p || p.active === false || !(Number(p.price) > 0)) fail("One of the items in your cart is no longer available. Please remove it and try again.");
+      if (p.sellOnline === false) fail(`${p.name} is available on enquiry only. Please request a quotation.`);
       lines.push({ kind: "product", productId: id, name: p.name, price: Number(p.price), quantity, unit: "", image: p.images?.[0] || "", category: p.category || "" });
     }
   }

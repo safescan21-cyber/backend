@@ -19,7 +19,7 @@ router.get("/sitemap-content.xml", async (req, res) => {
     const [press, products, apis] = await Promise.all([
       PressRelease.find({ isActive: true }).select("_id updatedAt publishedDate").sort({ publishedDate: -1 }).limit(5000).lean(),
       // demo products stay out of Google
-      Products.find({ images: { $not: /\/demo-products\// } }).select("_id updatedAt createdAt").limit(5000).lean(),
+      Products.find({ images: { $not: /\/demo-products\// }, active: { $ne: false } }).select("_id updatedAt createdAt").limit(5000).lean(),
       PharmaApi.find({ active: true }).select("slug updatedAt").limit(5000).lean(),
     ]);
     const urls = [
@@ -63,9 +63,9 @@ router.get("/p/:id", async (req, res) => {
   const target = `${SITE}/shop/${isId(id) ? id : ""}`;
   try {
     const p = isId(id)
-      ? await Products.findById(id).select("name description price images category").lean()
+      ? await Products.findById(id).select("name description price images category active").lean()
       : null;
-    if (!p) return res.redirect(302, `${SITE}/shop`);
+    if (!p || p.active === false) return res.redirect(302, `${SITE}/shop`);
 
     const price = Number(p.price) > 0 ? `₹${Number(p.price).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "";
     const title = `${p.name}${price ? ` – ${price}` : ""} | Food Pharma Machinery`;
