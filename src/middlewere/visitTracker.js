@@ -45,6 +45,13 @@ const visitTracker = (req, res, next) => {
   if (req.method === 'OPTIONS' || skipPaths.some(path => req.path.startsWith(path))) {
     return next();
   }
+  // Not visitors: the website's own server fetching data to build pages (Next.js
+  // calls the API from this machine with Node's fetch), and local health checks.
+  const ua = req.get('User-Agent') || '';
+  const ip = req.ip || '';
+  if (/^(node|undici|node-fetch)\b/i.test(ua) || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
+    return next();
+  }
 
   try {
     if (buffer.length < MAX_BUFFER) {

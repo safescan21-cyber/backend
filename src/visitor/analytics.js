@@ -130,37 +130,55 @@ router.get('/visitors', verifyToken, verifyAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
     const who = req.query.who === 'users' ? { userId: { $ne: null } } : req.query.who === 'guests' ? { userId: { $in: [null] } } : null;
 
-    const [result] = await Visit.aggregate([
-      ...(req.query.range ? [{ $match: { timestamp: { $gte: rangeStart(req.query.range) } } }] : []),
-      { $sort: { timestamp: -1 } },
-      {
-        $group: {
-          _id: '$visitorId',
-          ip: { $first: '$ip' },
-          userAgent: { $first: '$userAgent' },
-          userId: { $max: '$userId' }, // any visit made while logged in
-          firstVisit: { $last: '$timestamp' },
-          lastVisit: { $first: '$timestamp' },
-          pageCount: { $sum: 1 },
-          pages: { $push: '$page' },
-        },
-      },
-      ...(who ? [{ $match: who }] : []),
-      { $sort: { lastVisit: -1 } },
-      {
-        $facet: {
-          visitors: [
-            { $skip: skip },
-            { $limit: limit },
-            { $project: { ip: 1, userAgent: 1, userId: 1, firstVisit: 1, lastVisit: 1, pageCount: 1, pages: { $slice: ['$pages', 60] } } },
-          ],
-          total: [{ $count: 'count' }],
-        },
-      },
-    ]).allowDiskUse(true);
+    const since = req.query.range ? { timestamp: { $gte: rangeStart(req.query.range) } } : {};
 
-    const rows = result?.visitors || [];
-    const total = result?.total?.[0]?.count || 0;
+    // Step 1: the most recent visits (newest first, via the timestamp index),
+    // grouped per visitor. Working on a bounded window keeps every stage under
+    // MongoDB's 32 MB sort limit (this database plan can't sort on disk).
+    const WINDOW = 20000;
+    const [shown, totalRow] = await Promise.all([
+      Visit.aggregate([
+        ...(req.query.range ? [{ $match: since }] : []),
+        { $sort: { timestamp: -1 } },
+        { $limit: WINDOW },
+        {
+          $group: {
+            _id: '$visitorId',
+            ip: { $first: '$ip' },
+            userAgent: { $first: '$userAgent' },
+            userId: { $max: '$userId' }, // any visit made while logged in
+            firstVisit: { $min: '$timestamp' },
+            lastVisit: { $max: '$timestamp' },
+            pageCount: { $sum: 1 },
+          },
+        },
+        ...(who ? [{ $match: who }] : []),
+        { $sort: { lastVisit: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+      ]),
+      // How many visitors in total for this period/filter (counting needs no sort)
+      Visit.aggregate([
+        ...(req.query.range ? [{ $match: since }] : []),
+        ...(req.query.who === 'users' ? [{ $match: { userId: { $ne: null } } }] : []),
+        { $group: { _id: '$visitorId', userId: { $max: '$userId' } } },
+        ...(req.query.who === 'guests' ? [{ $match: { userId: null } }] : []),
+        { $count: 'count' },
+      ]),
+    ]);
+    const total = totalRow?.[0]?.count || 0;
+
+    // Step 2: the latest pages of just the visitors on this page
+    const pageRows = shown.length
+      ? await Visit.aggregate([
+          { $match: { ...since, visitorId: { $in: shown.map((v) => v._id) } } },
+          { $sort: { timestamp: -1 } },
+          { $group: { _id: '$visitorId', pages: { $push: '$page' } } },
+          { $project: { pages: { $slice: ['$pages', 60] } } },
+        ]).allowDiskUse(true)
+      : [];
+    const pagesOf = Object.fromEntries(pageRows.map((r) => [r._id, r.pages]));
+    const rows = shown.map((v) => ({ ...v, pages: pagesOf[v._id] || [] }));
 
     // Names/emails of logged-in visitors, product names for "Product: …" pages,
     // and the website pages logged-in customers opened (from Customer Insights)
