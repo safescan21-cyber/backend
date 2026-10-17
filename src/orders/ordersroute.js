@@ -29,7 +29,7 @@ const canSeeOrder = async (req, order) => {
   return Boolean(email) && [order.email, order.customerInfo?.email].some((e) => e?.toLowerCase() === email);
 };
 const { sendInvoiceWhatsApp, sendDispatchWhatsApp } = require("../utils/whatsapp");
-const { priceOrder } = require("../offers/coupon");
+const { priceOrder, priceLines } = require("../offers/coupon");
 
 // Records the WhatsApp result on the order; never throws.
 const recordWhatsApp = (orderId, sentField, promise) =>
@@ -70,16 +70,24 @@ router.post("/create-checkout-session", async (req, res) => {
     return res.status(400).json({ error: "No products provided" });
   }
   try {
-    const lineItems = products.map((product) => ({
+    // Older checkout flow: prices come from the database, never from the request
+    let priced;
+    try {
+      priced = await priceLines(products.map((p) => ({ productId: p.productId || p._id, quantity: p.quantity, kind: p.kind })));
+    } catch (e) {
+      if (e.status === 400) return res.status(400).json({ error: e.message });
+      throw e;
+    }
+    const lineItems = priced.map((line) => ({
       price_data: {
         currency: "inr",
         product_data: {
-          name: product.name,
-          images: product.image ? [product.image] : [],
+          name: line.name,
+          images: line.image ? [line.image] : [],
         },
-        unit_amount: Math.round(product.price * 100),
+        unit_amount: Math.round(line.price * 100),
       },
-      quantity: product.quantity,
+      quantity: line.quantity,
     }));
 
     const session = await stripe.checkout.sessions.create({
@@ -193,8 +201,19 @@ router.post("/", attachUserIfPresent, async (req, res) => {
 
     const email = (topLevelEmail || customerInfo.email || "").trim().toLowerCase();
 
-    // Totals and coupon are recalculated here — the browser's numbers are ignored
-    const pricing = await priceOrder(items, req.body.couponCode);
+    // Items, prices, totals and coupon are recalculated here — the browser's numbers are ignored
+    let pricing;
+    try {
+      pricing = await priceOrder(items, req.body.couponCode);
+    } catch (e) {
+      if (e.status === 400) return res.status(400).json({ message: e.message });
+      throw e;
+    }
+    // Pharma APIs are sold to licensed buyers only
+    const drugLicence = String(req.body.drugLicence || customerInfo.drugLicence || "").trim().slice(0, 60);
+    if (pricing.hasApi && drugLicence.length < 3) {
+      return res.status(400).json({ message: "Please enter your drug licence number to buy pharma APIs." });
+    }
     if (req.body.couponCode && !pricing.couponCode) {
       return res.status(400).json({ message: pricing.coupon?.message || "This coupon code can't be used." });
     }
@@ -222,9 +241,9 @@ router.post("/", attachUserIfPresent, async (req, res) => {
       orderId,
       userId: req.user?.id || req.user?._id || null,
       email,
-      customerInfo: { ...customerInfo, email },
+      customerInfo: { ...customerInfo, email, ...(pricing.hasApi && { drugLicence }) },
       shippingAddress,
-      items,
+      items: pricing.items,
       paymentMethod: method,
       paymentStatus: verifiedPaymentStatus,
       paymentIntentId: paymentIntentId || null,

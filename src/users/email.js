@@ -179,7 +179,8 @@ const sendOrderConfirmationEmail = (order) => {
 
   const shopUrl = `${frontendUrl}/shop`;
   const productUrl = (item) =>
-    item.productId ? `${shopUrl}/${encodeURIComponent(item.productId)}` : shopUrl;
+    item.kind === 'api' && item.slug ? `${frontendUrl}/pharma-api/${encodeURIComponent(item.slug)}`
+      : item.productId ? `${shopUrl}/${encodeURIComponent(item.productId)}` : shopUrl;
 
   // One row per product: image | name (linked) + qty × price | line total.
   // Three narrow columns so it stays readable on a phone without scrolling.
@@ -193,7 +194,7 @@ const sendOrderConfirmationEmail = (order) => {
         <td width="72" style="padding:12px 8px 12px 0;border-bottom:1px solid #eee;vertical-align:top;">${image}</td>
         <td style="padding:12px 8px;border-bottom:1px solid #eee;vertical-align:top;">
           <a href="${esc(url)}" style="color:#1a73e8;text-decoration:none;font-weight:bold;font-size:15px;">${esc(item.name)}</a>
-          <div style="color:#777;font-size:13px;margin-top:4px;">Qty ${esc(item.quantity)} × ${inr(item.price)}</div>
+          <div style="color:#777;font-size:13px;margin-top:4px;">Qty ${esc(item.quantity)}${item.unit ? ' ' + esc(item.unit) : ''} × ${inr(item.price)}${item.unit ? '/' + esc(item.unit) : ''}</div>
           <a href="${esc(url)}" style="color:#4CAF50;font-size:13px;text-decoration:none;">View product →</a>
         </td>
         <td style="padding:12px 0 12px 8px;border-bottom:1px solid #eee;vertical-align:top;text-align:right;white-space:nowrap;font-weight:bold;">${inr(item.price * item.quantity)}</td>

@@ -24,7 +24,13 @@ router.post("/create-payment-intent", express.json(), async (req, res) => {
       return res.status(400).json({ message: "Your cart is empty" });
     }
 
-    const pricing = await priceOrder(items, couponCode);
+    let pricing;
+    try {
+      pricing = await priceOrder(items, couponCode);
+    } catch (e) {
+      if (e.status === 400) return res.status(400).json({ message: e.message });
+      throw e;
+    }
     if (!(pricing.totalAmount > 0)) {
       return res.status(400).json({ message: "A valid amount is required" });
     }
@@ -47,6 +53,7 @@ router.post("/create-payment-intent", express.json(), async (req, res) => {
       paymentIntentId: paymentIntent.id,
       ...pricing,
       coupon: undefined,
+      items: undefined,
     });
   } catch (error) {
     console.error("Error creating payment intent:", error);

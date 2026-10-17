@@ -33,6 +33,11 @@ const PharmaApiSchema = new mongoose.Schema(
     packaging: { type: String, trim: true, maxlength: 200 },
     moq: { type: String, trim: true, maxlength: 60 },                             // minimum order quantity
     price: { type: String, trim: true, maxlength: 60 },                           // optional text, e.g. "₹2,400/kg"
+    // Online buying (cart + checkout like machines). unitPrice is ₹ per unit.
+    sellOnline: { type: Boolean, default: false },
+    unitPrice: { type: Number, min: 0, default: 0 },
+    unit: { type: String, enum: ['kg', 'g', 'L'], default: 'kg' },
+    minOrderQty: { type: Number, min: 1, default: 1 },
     description: { type: String, trim: true, maxlength: 10000 },
     images: { type: [String], default: [] },
     specifications: { type: [SpecSchema], default: [] },

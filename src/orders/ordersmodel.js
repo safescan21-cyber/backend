@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 // ── Sub-schemas ───────────────────────────────────────────────
 const CustomerInfoSchema = new mongoose.Schema({
+  drugLicence: { type: String, default: "" }, // required when the order has pharma APIs
   firstName: { type: String, required: true },
   lastName:  { type: String, required: true },
   email:     { type: String, required: true },
@@ -25,6 +26,9 @@ const OrderItemSchema = new mongoose.Schema({
   quantity:  { type: Number, required: true, min: 1 },
   image:     { type: String, default: "" },
   category:  { type: String, default: "" },
+  kind:      { type: String, enum: ["product", "api"], default: "product" }, // machine or pharma API
+  unit:      { type: String, default: "" },                                  // kg / g / L for APIs
+  slug:      { type: String, default: "" },
 }, { _id: false });
 
 // ── Main Order schema ─────────────────────────────────────────

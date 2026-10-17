@@ -42,6 +42,10 @@ const cleanBody = (body = {}) => {
   const docs = cleanDocuments(body.documents);
   if (docs !== undefined) out.documents = docs;
   if (typeof body.active === 'boolean') out.active = body.active;
+  if (typeof body.sellOnline === 'boolean') out.sellOnline = body.sellOnline;
+  if (body.unitPrice !== undefined) out.unitPrice = Math.max(0, Math.min(1e8, Math.round(Number(body.unitPrice) * 100) / 100 || 0));
+  if (['kg', 'g', 'L'].includes(body.unit)) out.unit = body.unit;
+  if (body.minOrderQty !== undefined) out.minOrderQty = Math.max(1, Math.min(100000, parseInt(body.minOrderQty, 10) || 1));
   return out;
 };
 
@@ -51,7 +55,7 @@ const uniqueSlug = async (base, exceptId) => {
   return slug;
 };
 
-const LIST_FIELDS = 'name slug chemicalName casNumber molecularFormula molecularWeight composition category grades form images moq updatedAt';
+const LIST_FIELDS = 'name slug chemicalName casNumber molecularFormula molecularWeight composition category grades form images moq sellOnline unitPrice unit minOrderQty updatedAt';
 
 router.get('/', async (req, res) => {
   try {

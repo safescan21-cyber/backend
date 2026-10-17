@@ -87,7 +87,7 @@ const generateInvoicePdf = (order) =>
         y = doc.page.margins.top;
       }
       doc.text(item.name || "", col.item + 6, y, { width: col.qty - col.item - 12 })
-        .text(String(item.quantity), col.qty, y, { width: col.price - col.qty - 6, align: "right" })
+        .text(`${item.quantity}${item.unit ? ` ${item.unit}` : ""}`, col.qty, y, { width: col.price - col.qty - 6, align: "right" })
         .text(money(item.price), col.price, y, { width: col.total - col.price - 6, align: "right" })
         .text(money(item.price * item.quantity), col.total, y, { width: right - col.total - 6, align: "right" });
       y += Math.max(nameHeight, 12) + 8;
