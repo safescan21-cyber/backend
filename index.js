@@ -130,6 +130,7 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/bulk-quotes", bulkQuoteRoutes);
+app.use("/api/pharma-apis", require("./src/pharmaApi/pharmaApiRoutes")); // API / bulk drug catalogue
 app.use("/", seoRoutes); // /sitemap-content.xml
 // Image/video uploads (login required). Also mounted at "/" so older frontend
 // calls to /uploadImages keep working until they are updated.

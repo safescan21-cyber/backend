@@ -8,6 +8,7 @@ const router = require("express").Router();
 router.use(require("./pageShells"));
 const PressRelease = require("../press/PressRelease");
 const Products = require("../products/productsmodel");
+const PharmaApi = require("../pharmaApi/PharmaApi");
 
 const SITE = "https://www.foodpharmamachinery.com";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -15,14 +16,16 @@ const day = (d) => new Date(d || Date.now()).toISOString().slice(0, 10);
 
 router.get("/sitemap-content.xml", async (req, res) => {
   try {
-    const [press, products] = await Promise.all([
+    const [press, products, apis] = await Promise.all([
       PressRelease.find({ isActive: true }).select("_id updatedAt publishedDate").sort({ publishedDate: -1 }).limit(5000).lean(),
       // demo products stay out of Google
       Products.find({ images: { $not: /\/demo-products\// } }).select("_id updatedAt createdAt").limit(5000).lean(),
+      PharmaApi.find({ active: true }).select("slug updatedAt").limit(5000).lean(),
     ]);
     const urls = [
       ...press.map((p) => ({ loc: `${SITE}/press/${p._id}`, lastmod: day(p.updatedAt || p.publishedDate), priority: "0.7" })),
       ...products.map((p) => ({ loc: `${SITE}/shop/${p._id}`, lastmod: day(p.updatedAt || p.createdAt), priority: "0.8" })),
+      ...apis.map((a) => ({ loc: `${SITE}/pharma-api/${a.slug}`, lastmod: day(a.updatedAt), priority: "0.7" })),
     ];
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
