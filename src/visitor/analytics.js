@@ -17,14 +17,21 @@ const getUniqueVisitorCount = async () => {
   return result[0]?.count || 0;
 };
 
+// ?range=7d | 30d | 90d (the dashboard's period buttons); default 7 days
+const rangeStart = (range) => {
+  const days = { '7d': 7, '30d': 30, '90d': 90 }[range] || 7;
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d;
+};
+
 // Get dashboard stats
 router.get('/visitor-stats', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgo = rangeStart(req.query.range); // start of the chosen period
 
     const [totalVisits, uniqueCount, todayVisits, dailyStats, topPages] =
       await Promise.all([
@@ -86,6 +93,7 @@ router.get('/visitors', verifyToken, verifyAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const [result] = await Visit.aggregate([
+      ...(req.query.range ? [{ $match: { timestamp: { $gte: rangeStart(req.query.range) } } }] : []),
       { $sort: { timestamp: -1 } },
       {
         $group: {
