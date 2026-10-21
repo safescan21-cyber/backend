@@ -497,7 +497,27 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
   return true;
 };
 
+// Tells the admin a customer testimonial is waiting for approval
+const sendTestimonialNotice = (t) => {
+  const to = process.env.CONTACT_EMAIL || process.env.SMTP_USER;
+  if (!to) return;
+  const site = (process.env.FRONTEND_URL || 'https://www.foodpharmamachinery.com').replace(/\/$/, '');
+  emailQueue.add(() => transporter.sendMail({
+    from,
+    to,
+    subject: `New testimonial from ${t.name}${t.company ? ` (${t.company})` : ''} – waiting for approval`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:560px">
+      <h2 style="color:#1a73e8;margin-top:0">New customer testimonial</h2>
+      <p><strong>${esc(t.name)}</strong>${t.role ? `, ${esc(t.role)}` : ''}${t.company ? ` – ${esc(t.company)}` : ''}${t.city ? `, ${esc(t.city)}` : ''}</p>
+      <p>Rating: ${'★'.repeat(t.rating || 5)}${'☆'.repeat(5 - (t.rating || 5))}${t.verifiedBuyer ? ' · verified buyer' : ''}</p>
+      <blockquote style="border-left:4px solid #1a73e8;margin:0;padding:8px 12px;background:#f5f8ff">${esc(t.quote)}</blockquote>
+      <p style="margin-top:16px"><a href="${site}/dashboard/testimonials" style="background:#1a73e8;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Review in dashboard</a></p>
+    </div>`,
+  })); // the queue logs any sending error
+};
+
 module.exports = {
+  sendTestimonialNotice,
   sendBulkQuoteEmails,
   sendResetEmail,
   sendWelcomeEmail,
