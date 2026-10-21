@@ -277,4 +277,18 @@ router.delete("/visitor/:visitorId", verifyToken, verifyAdmin, async (req, res) 
   }
 });
 
+// Delete ALL tracked activity (admin; the page's "Delete all insights data").
+// Body must be { confirm: "DELETE ALL" }. Customer accounts and orders stay.
+router.post("/delete-all", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    if (req.body?.confirm !== "DELETE ALL") return res.status(400).json({ message: "Confirmation missing" });
+    const { deletedCount } = await ActivityEvent.deleteMany({});
+    console.log(`Insights: admin ${req.userId || ""} deleted ALL activity records (${deletedCount})`);
+    res.json({ message: "All insights data deleted", deleted: deletedCount });
+  } catch (error) {
+    console.error("Delete all insights error:", error);
+    res.status(500).json({ message: "Failed to delete insights data" });
+  }
+});
+
 module.exports = router;

@@ -271,4 +271,19 @@ router.delete('/visitors/:visitorId', verifyToken, verifyAdmin, async (req, res)
   }
 });
 
+// Delete ALL visitor records (admin; the page's "Delete all visitor data").
+// Body must be { confirm: "DELETE ALL" } so a stray request can't wipe the data.
+// Accounts, orders and Customer Insights data are not touched.
+router.post('/visitors/delete-all', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    if (req.body?.confirm !== 'DELETE ALL') return res.status(400).json({ message: 'Confirmation missing' });
+    const { deletedCount } = await Visit.deleteMany({});
+    console.log(`Visitors: admin ${req.userId || ''} deleted ALL visit records (${deletedCount})`);
+    res.json({ message: 'All visitor data deleted', deleted: deletedCount });
+  } catch (error) {
+    console.error('Delete all visitors error:', error);
+    res.status(500).json({ message: 'Failed to delete visitor data' });
+  }
+});
+
 module.exports = router;
