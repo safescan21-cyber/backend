@@ -29,6 +29,7 @@ const heroRoutes = require("./src/Hero/heroRoutes");
 const pressRoutes = require("./src/press/pressRoutes");
 const newsletterRoutes = require("./src/news/newsletterRoutes");
 const insightsRoutes = require("./src/insights/insightsRoutes");
+const { startDataRetention } = require("./src/utils/dataRetention");
 const offerRoutes = require("./src/offers/offerRoutes");
 const seoRoutes = require("./src/seo/seoRoutes");
 const bulkQuoteRoutes = require("./src/quotes/bulkQuoteRoutes");
@@ -225,6 +226,8 @@ httpServer.on("error", (err) => {
 const startServer = async () => {
   try {
     await connectToMongoDB();
+    // Visitor analytics and insights: keep 7 days, delete older automatically
+    startDataRetention().catch((err) => console.error("Retention start failed:", err.message));
 
     httpServer.listen(port, host, () => {
       console.log(

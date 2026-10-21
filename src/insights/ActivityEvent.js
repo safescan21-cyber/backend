@@ -17,8 +17,8 @@ const activityEventSchema = new mongoose.Schema({
   createdAt:   { type: Date, default: Date.now },
 });
 
-// Keep 180 days of history
-activityEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 180 * 24 * 60 * 60 });
+// Kept 7 days, then deleted automatically (see utils/dataRetention.js)
+activityEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
 activityEventSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("ActivityEvent", activityEventSchema);
