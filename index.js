@@ -34,6 +34,7 @@ const { startFollowUps } = require("./src/quotes/followUps");
 const offerRoutes = require("./src/offers/offerRoutes");
 const seoRoutes = require("./src/seo/seoRoutes");
 const bulkQuoteRoutes = require("./src/quotes/bulkQuoteRoutes");
+const serviceRoutes = require("./src/service/serviceRoutes");
 const contactRoutes = require("./src/contact/contactRoutes");
 const quoteRoutes = require("./src/users/Quoteroutes");
 
@@ -132,6 +133,7 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/bulk-quotes", bulkQuoteRoutes);
+app.use("/api/service", serviceRoutes); // service requests, AMC bookings and plans
 app.use("/api/pharma-apis", require("./src/pharmaApi/pharmaApiRoutes")); // API / bulk drug catalogue
 app.use("/api/testimonials", require("./src/testimonials/testimonialRoutes")); // customer testimonials
 app.use("/", seoRoutes); // /sitemap-content.xml

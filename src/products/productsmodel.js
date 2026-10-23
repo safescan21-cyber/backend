@@ -39,6 +39,14 @@ const ProductSchema = new mongoose.Schema(
     // so it works for any product category without a fixed schema.
     specifications: { type: [SpecificationSchema], default: [] },
     documents: { type: [DocumentSchema], default: [] },
+    // Spare parts: the machine models this part fits ("ZP-35D", "NJP-1200"…), used by
+    // the /spares finder. Cleaned to unique, trimmed names (max 40).
+    fitsModels: {
+      type: [String],
+      default: [],
+      set: (list) => [...new Set((Array.isArray(list) ? list : String(list || '').split(','))
+        .map((m) => String(m).trim().slice(0, 60)).filter(Boolean))].slice(0, 40),
+    },
     // Admin controls: hidden products are off the website; sellOnline false = enquiry only
     active: { type: Boolean, default: true },
     sellOnline: { type: Boolean, default: true },

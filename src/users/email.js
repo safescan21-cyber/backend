@@ -590,6 +590,95 @@ const sendQuotationFollowUp = async (quote, pdfUrl) => {
   return info.messageId;
 };
 
+// ─── Service requests & AMC bookings (service/serviceRoutes.js) ───
+const SERVICE_STATUS = { open: 'Received', scheduled: 'Visit scheduled', in_progress: 'Work in progress', resolved: 'Resolved', closed: 'Closed' };
+const URGENCY = { normal: 'Normal', urgent: 'Urgent', machine_down: 'Machine stopped' };
+
+// Business email first, then (if the customer gave an email) their confirmation
+const sendServiceRequestEmails = (r, hooks = {}) => {
+  const c = r.contact || {};
+  const isAmc = r.type === 'amc';
+  const what = isAmc ? 'AMC request' : 'service request';
+  const site = (process.env.FRONTEND_URL || 'https://www.foodpharmamachinery.com').replace(/\/$/, '');
+  const facts = [
+    ['Machine', [r.machine?.name, r.machine?.model].filter(Boolean).join(' · ')],
+    ['Serial no.', r.machine?.serialNumber],
+    ['Installed', r.machine?.installedYear],
+    isAmc && ['Plan', r.amc?.planName],
+    isAmc && ['Machines', r.amc?.machines],
+    !isAmc && ['Urgency', URGENCY[r.urgency]],
+    ['Location', [r.city, r.state].filter(Boolean).join(', ')],
+  ].filter((f) => f && f[1]);
+  const table = `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">${facts.map(([k, v]) => `<tr><td style="padding:3px 12px 3px 0;color:#666;">${esc(k)}</td><td style="padding:3px 0;"><strong>${esc(v)}</strong></td></tr>`).join('')}</table>`;
+  const photos = (r.photos || []).map((u) => `<a href="${esc(u)}"><img src="${esc(u)}" width="120" style="border-radius:6px;margin:4px 4px 0 0;" alt="photo" /></a>`).join('');
+
+  emailQueue.add(async () => {
+    const to = quoteAdminTo();
+    if (!to) { hooks.onError?.('No business email address is set'); return; }
+    try {
+      await transporter.sendMail({
+        from, to,
+        ...(c.email && { replyTo: c.email }),
+        subject: `${r.urgency === 'machine_down' ? 'URGENT – machine stopped: ' : ''}New ${what} ${r.number} — ${r.machine?.name || r.amc?.planName || ''} — call ${c.phone}`,
+        html: plainWrap(`
+          <h2 style="margin-top:0;color:#e65100;">New ${esc(what)} ${esc(r.number)}</h2>
+          <p><strong>${esc(c.name)}</strong>${c.company ? ` · ${esc(c.company)}` : ''}<br/>
+          <a href="tel:${esc(String(c.phone).replace(/\s/g, ''))}">${esc(c.phone)}</a>${c.email ? ` · <a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}</p>
+          ${table}
+          ${r.issue ? `<p style="white-space:pre-line;background:#f8fafc;padding:10px;border-radius:6px;">${esc(r.issue)}</p>` : ''}
+          ${photos ? `<p>${photos}</p>` : ''}
+          <p><a href="${site}/dashboard/service-requests" style="background:#e65100;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;">Open service requests</a></p>`),
+      });
+      await hooks.onAdminSent?.();
+    } catch (err) {
+      hooks.onError?.(`Business email failed: ${err.message}`);
+      throw err;
+    }
+    if (!c.email) return;
+    try {
+      await transporter.sendMail({
+        from, to: c.email,
+        ...(to && { replyTo: to }),
+        subject: `We received your ${what} ${r.number} - ${company.name}`,
+        html: plainWrap(`
+          <p>Dear ${esc(c.name)},</p>
+          <p>Thank you. We have received your ${esc(what)} <strong>${esc(r.number)}</strong>.</p>
+          ${table}
+          <p style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:12px;border-radius:4px;">Our service team will call you ${r.urgency === 'machine_down' ? 'as soon as possible' : 'within 1 business day'} to ${isAmc ? 'discuss the plan and your machines' : 'plan the visit or help over the phone'}.</p>
+          <p>You can follow the status in your account under <a href="${site}/dashboard/service">My service requests</a> (log in with this email address).</p>
+          <p>Urgent? Call/WhatsApp <a href="tel:${esc(company.phone.replace(/\s/g, ''))}">${esc(company.phone)}</a>.</p>
+          <p>Regards,<br/><strong>${esc(company.name)}</strong></p>`),
+      });
+      await hooks.onCustomerSent?.();
+    } catch (err) {
+      hooks.onError?.(`Customer confirmation failed: ${err.message}`);
+      throw err;
+    }
+  });
+  return true;
+};
+
+// The customer's request changed status or got a note from the service team
+const sendServiceUpdateEmail = async (r, note) => {
+  const c = r.contact || {};
+  if (!c.email) return null;
+  const site = (process.env.FRONTEND_URL || 'https://www.foodpharmamachinery.com').replace(/\/$/, '');
+  const when = r.scheduledFor ? new Date(r.scheduledFor).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const info = await transporter.sendMail({
+    from, to: c.email,
+    ...(quoteAdminTo() && { replyTo: quoteAdminTo() }),
+    subject: `${r.number}: ${SERVICE_STATUS[r.status] || r.status} - ${company.name}`,
+    html: plainWrap(`
+      <p>Dear ${esc(c.name)},</p>
+      <p>Your ${r.type === 'amc' ? 'AMC request' : 'service request'} <strong>${esc(r.number)}</strong>${r.machine?.name ? ` (${esc(r.machine.name)})` : ''} is now: <strong>${esc(SERVICE_STATUS[r.status] || r.status)}</strong>.</p>
+      ${r.status === 'scheduled' && when ? `<p style="background:#ecfeff;border-left:4px solid #0891B2;padding:12px;border-radius:4px;">Visit planned for <strong>${esc(when)}</strong>.</p>` : ''}
+      ${note ? `<p style="white-space:pre-line;background:#f8fafc;padding:10px;border-radius:6px;">${esc(note)}</p>` : ''}
+      <p><a href="${site}/dashboard/service">See the full history</a> · Questions? Reply to this email or call ${esc(company.phone)}.</p>
+      <p>Regards,<br/><strong>${esc(company.name)}</strong></p>`),
+  });
+  return info.messageId;
+};
+
 // Tells the admin a customer testimonial is waiting for approval
 const sendTestimonialNotice = (t) => {
   const to = process.env.CONTACT_EMAIL || process.env.SMTP_USER;
@@ -610,6 +699,8 @@ const sendTestimonialNotice = (t) => {
 };
 
 module.exports = {
+  sendServiceRequestEmails,
+  sendServiceUpdateEmail,
   sendQuotationEmail,
   sendLeadReminder,
   sendQuotationFollowUp,
