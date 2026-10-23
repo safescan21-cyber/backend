@@ -1,5 +1,6 @@
 // Bulk order / quote requests
 //   POST  /api/bulk-quotes        anyone (logged in or not) — spam-protected
+//   POST  /api/bulk-quotes/quick  short form on machine pages (see below)
 //   GET   /api/bulk-quotes/mine   logged-in customer's own requests
 //   GET   /api/bulk-quotes        admin: list, filter by status, search
 //   PATCH /api/bulk-quotes/:id    admin: change status / notes
@@ -54,6 +55,43 @@ const sendQuoteEmails = (quote) => {
     console.error("Bulk quote email failed:", mailError.message);
   }
 };
+
+// "Get a quote in 2 minutes" form on machine pages: machine, capacity, city, name and
+// phone (email optional). Saved as a bulk quote (source "quick"), so it reaches the
+// same business email and admin page.
+router.post("/quick", optionalAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b.website) return res.status(201).json({ success: true, quoteNumber: "BQ-RECEIVED" }); // honeypot
+    if (limited(req.ip)) {
+      return res.status(429).json({ message: "Too many requests. Please try again in a few minutes." });
+    }
+    const contact = { name: clean(b.name, 100), company: clean(b.company, 150), email: clean(b.email, 150).toLowerCase(), phone: clean(b.phone, 30), gstin: "" };
+    const machine = clean(b.machine, 200);
+    const capacity = clean(b.capacity, 200);
+    const city = clean(b.city, 100);
+    if (!machine) return res.status(400).json({ message: "Please tell us which machine you need." });
+    if (!contact.name || !contact.phone) return res.status(400).json({ message: "Please enter your name and phone number." });
+    if (!/^[+\d][\d\s-]{6,}$/.test(contact.phone)) return res.status(400).json({ message: "Please enter a valid phone number." });
+    if (contact.email && !EMAIL_RE.test(contact.email)) return res.status(400).json({ message: "Please enter a valid email address, or leave it empty." });
+
+    const quote = await BulkQuote.create({
+      quoteNumber: await newQuoteNumber(),
+      userId: req.userId ? String(req.userId) : null,
+      contact,
+      items: [{ productId: clean(b.productId, 64), name: machine, quantity: 1, notes: capacity ? `Capacity: ${capacity}` : "" }],
+      deliveryCity: city,
+      country: "India",
+      message: [capacity && `Required capacity: ${capacity}`, city && `City: ${city}`].filter(Boolean).join("\n"),
+      source: "quick",
+    });
+    sendQuoteEmails(quote);
+    res.status(201).json({ success: true, quoteNumber: quote.quoteNumber });
+  } catch (error) {
+    console.error("Quick quote error:", error);
+    res.status(500).json({ message: "Could not send your request right now. Please try again or contact us on WhatsApp." });
+  }
+});
 
 router.post("/", optionalAuth, async (req, res) => {
   try {

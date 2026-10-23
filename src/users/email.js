@@ -405,8 +405,10 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
   const adminMail = {
     from,
     to: adminTo,
-    replyTo: c.email,
-    subject: `New bulk quote ${quote.quoteNumber} — ${quote.items.length} item(s)${c.company ? ` from ${c.company}` : ''}`,
+    ...(c.email && { replyTo: c.email }),
+    subject: quote.source === 'quick'
+      ? `New quick quote ${quote.quoteNumber} — ${quote.items[0]?.name || 'machine'}${quote.deliveryCity ? ` (${quote.deliveryCity})` : ''} — call ${c.phone}`
+      : `New bulk quote ${quote.quoteNumber} — ${quote.items.length} item(s)${c.company ? ` from ${c.company}` : ''}`,
     html: wrap(`
         <h2 style="margin-top:0;color:#e65100;">New bulk quote request</h2>
         <p><strong>${esc(quote.quoteNumber)}</strong></p>
@@ -484,6 +486,7 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
       throw lastError;
     }
     await hooks.onAdminSent?.();
+    if (!c.email) return; // quick quotes may come without an email address
 
     try {
       const info = await transporter.sendMail(customerMail);

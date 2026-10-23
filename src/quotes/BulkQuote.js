@@ -18,7 +18,8 @@ const bulkQuoteSchema = new mongoose.Schema(
     contact: {
       name:    { type: String, required: true, trim: true, maxlength: 100 },
       company: { type: String, default: "", trim: true, maxlength: 150 },
-      email:   { type: String, required: true, trim: true, lowercase: true, maxlength: 150, index: true },
+      // Optional only for quick quotes (machine page form: name + phone is enough)
+      email:   { type: String, required: function () { return this.source !== "quick"; }, default: "", trim: true, lowercase: true, maxlength: 150, index: true },
       phone:   { type: String, required: true, trim: true, maxlength: 30 },
       gstin:   { type: String, default: "", trim: true, uppercase: true, maxlength: 20 },
     },
@@ -28,7 +29,7 @@ const bulkQuoteSchema = new mongoose.Schema(
     country:      { type: String, default: "India", trim: true, maxlength: 60 },
     requiredBy:   { type: Date },
     message:      { type: String, default: "", trim: true, maxlength: 3000 },
-    source:       { type: String, enum: ["navbar", "cart", "product", "other"], default: "other" },
+    source:       { type: String, enum: ["navbar", "cart", "product", "quick", "other"], default: "other" }, // quick = "Get a quote in 2 minutes" form
 
     status: {
       type: String,
