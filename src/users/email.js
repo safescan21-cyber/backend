@@ -500,6 +500,96 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
   return true;
 };
 
+// ─── Quotation builder & follow-ups (quotes/bulkQuoteRoutes.js, quotes/followUps.js) ───
+const plainWrap = (inner) => `<!DOCTYPE html><html><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+<body style="margin:0;padding:16px 8px;background:#f4f4f4;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:10px;">${brandHeader()}
+<tr><td style="padding:24px 28px;font-family:Arial,sans-serif;color:#333;font-size:14px;line-height:1.55;">${inner}</td></tr>${brandFooter()}</table></td></tr></table></body></html>`;
+const quoteAdminTo = () => process.env.QUOTE_TO || process.env.CONTACT_EMAIL || process.env.SMTP_USER;
+
+// The formal quotation, PDF attached. Resolves with the message id (rejects on failure,
+// so the admin page can say whether it was sent).
+const sendQuotationEmail = async (quote, pdf, pdfUrl) => {
+  const q = quote.quotation || {};
+  const c = quote.contact || {};
+  const info = await transporter.sendMail({
+    from,
+    to: c.email,
+    ...(quoteAdminTo() && { bcc: quoteAdminTo(), replyTo: quoteAdminTo() }),
+    subject: `Quotation ${q.number} for your enquiry ${quote.quoteNumber} - ${company.name}`,
+    text: [
+      `Dear ${c.name},`,
+      '',
+      `Thank you for your enquiry ${quote.quoteNumber}. Please find our quotation ${q.number} attached.`,
+      `Total: ${inr(q.total)} including GST, valid for ${q.validityDays || 15} days.`,
+      pdfUrl && `You can also open it here: ${pdfUrl}`,
+      '',
+      `Questions? Reply to this email or call/WhatsApp ${company.phone}.`,
+      '',
+      `Regards,`,
+      company.name,
+    ].filter((l) => l !== false && l !== undefined).join('\n'),
+    html: plainWrap(`
+      <p>Dear ${esc(c.name)},</p>
+      <p>Thank you for your enquiry <strong>${esc(quote.quoteNumber)}</strong>. Please find our quotation <strong>${esc(q.number)}</strong> attached.</p>
+      <p style="background:#ecfeff;border-left:4px solid #0891B2;padding:12px;border-radius:4px;">
+        <strong>Total: ${esc(inr(q.total))}</strong> including GST<br/>
+        ${q.deliveryTime ? `Delivery: ${esc(q.deliveryTime)}<br/>` : ''}
+        Valid for ${esc(q.validityDays || 15)} days
+      </p>
+      ${pdfUrl ? `<p><a href="${esc(pdfUrl)}" style="background:#0891B2;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;">Open the quotation (PDF)</a></p>` : ''}
+      <p>Questions or changes? Simply reply to this email or call/WhatsApp <a href="tel:${esc(company.phone.replace(/\s/g, ''))}">${esc(company.phone)}</a>.</p>
+      <p>Regards,<br/><strong>${esc(company.name)}</strong></p>`),
+    attachments: [{ filename: `Quotation-${q.number}.pdf`, content: pdf, contentType: 'application/pdf' }],
+  });
+  return info.messageId;
+};
+
+// One email to the business listing new leads nobody has answered for a day
+const sendLeadReminder = async (quotes, adminUrl) => {
+  const to = quoteAdminTo();
+  if (!to || !quotes.length) return null;
+  const rows = quotes.map((qt) => `
+    <tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;"><strong>${esc(qt.quoteNumber)}</strong><br/><span style="color:#888;font-size:12px;">${esc(new Date(qt.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;">${esc(qt.contact?.name)}<br/><a href="tel:${esc(String(qt.contact?.phone || '').replace(/\s/g, ''))}">${esc(qt.contact?.phone)}</a></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;">${esc((qt.items || []).map((i) => i.name).join(', ').slice(0, 120))}${qt.deliveryCity ? `<br/><span style="color:#888;">${esc(qt.deliveryCity)}</span>` : ''}</td>
+    </tr>`).join('');
+  const info = await transporter.sendMail({
+    from,
+    to,
+    subject: `Reminder: ${quotes.length} enquir${quotes.length === 1 ? 'y' : 'ies'} waiting more than 24 hours`,
+    html: plainWrap(`
+      <h2 style="margin-top:0;color:#e65100;">${quotes.length} enquir${quotes.length === 1 ? 'y has' : 'ies have'} not been answered yet</h2>
+      <p>These are still marked <strong>new</strong> after more than a day. A quick call usually wins the order.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">${rows}</table>
+      <p style="margin-top:16px;"><a href="${esc(adminUrl)}" style="background:#e65100;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;">Open bulk quotes</a></p>
+      <p style="color:#888;font-size:12px;">Mark an enquiry as "contacted" in admin and it won't be listed again.</p>`),
+  });
+  return info.messageId;
+};
+
+// Two days after the quotation: a short "any questions?" note to the customer, once
+const sendQuotationFollowUp = async (quote, pdfUrl) => {
+  const q = quote.quotation || {};
+  const c = quote.contact || {};
+  if (!c.email) return null;
+  const info = await transporter.sendMail({
+    from,
+    to: c.email,
+    ...(quoteAdminTo() && { replyTo: quoteAdminTo() }),
+    subject: `Any questions about quotation ${q.number}? - ${company.name}`,
+    html: plainWrap(`
+      <p>Dear ${esc(c.name)},</p>
+      <p>We sent you quotation <strong>${esc(q.number)}</strong> (${esc((q.items || []).map((i) => i.name).join(', ').slice(0, 150))}) on ${esc(new Date(q.sentAt).toLocaleDateString('en-IN', { dateStyle: 'medium' }))}.</p>
+      <p>Do you have any questions about the specification, delivery or payment terms? We are happy to adjust the offer or arrange a video call to show the machine running.</p>
+      ${pdfUrl ? `<p><a href="${esc(pdfUrl)}">Open the quotation again (PDF)</a></p>` : ''}
+      <p>Just reply to this email, or call/WhatsApp <a href="tel:${esc(company.phone.replace(/\s/g, ''))}">${esc(company.phone)}</a>.</p>
+      <p>Regards,<br/><strong>${esc(company.name)}</strong></p>`),
+  });
+  return info.messageId;
+};
+
 // Tells the admin a customer testimonial is waiting for approval
 const sendTestimonialNotice = (t) => {
   const to = process.env.CONTACT_EMAIL || process.env.SMTP_USER;
@@ -520,6 +610,9 @@ const sendTestimonialNotice = (t) => {
 };
 
 module.exports = {
+  sendQuotationEmail,
+  sendLeadReminder,
+  sendQuotationFollowUp,
   sendTestimonialNotice,
   sendBulkQuoteEmails,
   sendResetEmail,

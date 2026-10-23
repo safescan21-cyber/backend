@@ -30,6 +30,7 @@ const pressRoutes = require("./src/press/pressRoutes");
 const newsletterRoutes = require("./src/news/newsletterRoutes");
 const insightsRoutes = require("./src/insights/insightsRoutes");
 const { startDataRetention } = require("./src/utils/dataRetention");
+const { startFollowUps } = require("./src/quotes/followUps");
 const offerRoutes = require("./src/offers/offerRoutes");
 const seoRoutes = require("./src/seo/seoRoutes");
 const bulkQuoteRoutes = require("./src/quotes/bulkQuoteRoutes");
@@ -228,6 +229,8 @@ const startServer = async () => {
     await connectToMongoDB();
     // Visitor analytics and insights: keep 7 days, delete older automatically
     startDataRetention().catch((err) => console.error("Retention start failed:", err.message));
+    // Quote requests: reminder for unanswered enquiries, follow-up after quotations
+    startFollowUps();
 
     httpServer.listen(port, host, () => {
       console.log(
