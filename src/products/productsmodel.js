@@ -47,6 +47,14 @@ const ProductSchema = new mongoose.Schema(
       set: (list) => [...new Set((Array.isArray(list) ? list : String(list || '').split(','))
         .map((m) => String(m).trim().slice(0, 60)).filter(Boolean))].slice(0, 40),
     },
+    // Questions buyers ask about this machine (product page + FAQ rich results on Google)
+    faqs: {
+      type: [{ _id: false, q: { type: String, trim: true, maxlength: 300 }, a: { type: String, trim: true, maxlength: 2000 } }],
+      default: [],
+      set: (list) => (Array.isArray(list) ? list : [])
+        .map((f) => ({ q: String(f?.q || '').trim().slice(0, 300), a: String(f?.a || '').trim().slice(0, 2000) }))
+        .filter((f) => f.q && f.a).slice(0, 15),
+    },
     // Admin controls: hidden products are off the website; sellOnline false = enquiry only
     active: { type: Boolean, default: true },
     sellOnline: { type: Boolean, default: true },
