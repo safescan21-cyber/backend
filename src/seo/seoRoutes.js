@@ -22,14 +22,24 @@ router.get("/sitemap-content.xml", async (req, res) => {
       Products.find({ images: { $not: /\/demo-products\// }, active: { $ne: false } }).select("_id updatedAt createdAt").limit(5000).lean(),
       PharmaApi.find({ active: true }).select("slug updatedAt").limit(5000).lean(),
     ]);
-    const urls = [
+    const items = [
       ...press.map((p) => ({ loc: `${SITE}/press/${p._id}`, lastmod: day(p.updatedAt || p.publishedDate), priority: "0.7" })),
       ...products.map((p) => ({ loc: `${SITE}/shop/${p._id}`, lastmod: day(p.updatedAt || p.createdAt), priority: "0.8" })),
       ...apis.map((a) => ({ loc: `${SITE}/pharma-api/${a.slug}`, lastmod: day(a.updatedAt), priority: "0.7" })),
     ];
+    // The catalogue pages are always listed too, dated by their newest item: Google
+    // rejects a sitemap without any <url> ("Missing XML tag"), e.g. while the shop
+    // only has demo products. (They are also in the website's own sitemap.xml.)
+    const newest = (list) => list.map((u) => u.lastmod).sort().pop();
+    const catalogue = [
+      { loc: `${SITE}/shop`, lastmod: newest(items.filter((u) => u.loc.includes("/shop/"))), priority: "0.9" },
+      { loc: `${SITE}/press`, lastmod: newest(items.filter((u) => u.loc.includes("/press/"))), priority: "0.6" },
+      { loc: `${SITE}/pharma-api`, lastmod: newest(items.filter((u) => u.loc.includes("/pharma-api/"))), priority: "0.8" },
+    ];
+    const urls = [...catalogue, ...items];
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map((u) => `  <url>\n    <loc>${esc(u.loc)}</loc>\n    <lastmod>${u.lastmod}</lastmod>\n    <priority>${u.priority}</priority>\n  </url>`).join("\n")}
+${urls.map((u) => `  <url>\n    <loc>${esc(u.loc)}</loc>\n${u.lastmod ? `    <lastmod>${u.lastmod}</lastmod>\n` : ""}    <priority>${u.priority}</priority>\n  </url>`).join("\n")}
 </urlset>
 `;
     res.set("Content-Type", "application/xml; charset=utf-8");
