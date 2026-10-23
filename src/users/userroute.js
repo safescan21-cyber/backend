@@ -146,6 +146,115 @@ const recordAttempt = (key) => {
   attemptBuckets.set(key, list);
 };
 
+// ── Two-step login for admins ─────────────────────────────────────────────────
+// A correct password (or Google) is step one; for an admin we then email a 6-digit
+// code and only hand out the login token after POST /login/2fa.
+// ADMIN_TWO_STEP=off in .env switches it off (escape hatch if email sending breaks).
+const twoStepOn = () => String(process.env.ADMIN_TWO_STEP || "on").toLowerCase() !== "off";
+const needsTwoStep = (user) => user.role === "admin" && twoStepOn();
+const twoStepKey = (user) => `2fa:${user._id}`; // stored in OtpCode.email
+// Own secret, so a challenge can never pass verifyToken as a login
+const challengeSecret = () => `${process.env.JWT_SECRET || "fallback_secret_key"}:admin-2fa`;
+const readChallenge = (challenge) => {
+  try {
+    const d = jwt.verify(String(challenge || ""), challengeSecret());
+    return d.purpose === "2fa" ? d.id : null;
+  } catch {
+    return null;
+  }
+};
+
+const sendTwoStepCode = async (user) => {
+  const key = twoStepKey(user);
+  const existing = await OtpCode.findOne({ email: key });
+  if (existing) {
+    const wait = OTP_RESEND_MS - (Date.now() - new Date(existing.lastSentAt).getTime());
+    if (wait > 0) return { wait: Math.ceil(wait / 1000) };
+  }
+  const code = generateOtp();
+  await OtpCode.findOneAndUpdate(
+    { email: key },
+    { email: key, codeHash: hashOtp(key, code), attempts: 0, lastSentAt: new Date(), expiresAt: new Date(Date.now() + OTP_TTL_MS) },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+  );
+  try {
+    await sendOtpEmail(user.email, code);
+  } catch (err) {
+    await OtpCode.deleteOne({ email: key }).catch(() => {});
+    throw err;
+  }
+  console.log(`[2fa] admin code sent to ${maskEmail(user.email)}`);
+  return {};
+};
+
+// Reply for step one: no token yet, just a short-lived challenge for step two
+const startTwoStep = async (user, res) => {
+  try {
+    await sendTwoStepCode(user);
+  } catch (err) {
+    console.error("Admin 2-step email failed:", err.message || err);
+    return res.status(500).json({ message: "We could not email your login code. Please try again in a minute." });
+  }
+  res.status(200).json({
+    twoStep: true,
+    challenge: jwt.sign({ id: user._id, purpose: "2fa" }, challengeSecret(), { expiresIn: "15m" }),
+    email: maskEmail(user.email),
+    message: `We emailed a 6-digit code to ${maskEmail(user.email)}.`,
+  });
+};
+
+router.post("/login/2fa", async (req, res) => {
+  try {
+    const id = readChallenge(req.body.challenge);
+    const otp = String(req.body.otp || "").replace(/\s+/g, "");
+    if (!id) return res.status(401).json({ message: "This login has expired. Please log in again." });
+    if (!/^\d{6}$/.test(otp)) return res.status(400).json({ message: "Enter the 6-digit code from your email." });
+
+    const user = await User.findById(id);
+    if (!user) return res.status(401).json({ message: "Please log in again." });
+    const key = twoStepKey(user);
+    const record = await OtpCode.findOne({ email: key });
+    if (!record || new Date(record.expiresAt).getTime() < Date.now()) {
+      if (record) await OtpCode.deleteOne({ email: key }).catch(() => {});
+      return res.status(400).json({ message: "This code has expired. Please ask for a new one." });
+    }
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      await OtpCode.deleteOne({ email: key }).catch(() => {});
+      return res.status(429).json({ message: "Too many wrong attempts. Please log in again." });
+    }
+    if (!safeEqual(record.codeHash, hashOtp(key, otp))) {
+      record.attempts += 1;
+      await record.save();
+      const left = OTP_MAX_ATTEMPTS - record.attempts;
+      return res.status(400).json({
+        message: left > 0 ? `Incorrect code. ${left} attempt${left === 1 ? "" : "s"} left.` : "Too many wrong attempts. Please log in again.",
+      });
+    }
+    await OtpCode.deleteOne({ email: key });
+
+    const token = generateToken(user);
+    res.cookie("token", token, cookieOptions);
+    res.status(200).json({ message: "Logged in successfully", token, user: toClientUser(user) });
+  } catch (error) {
+    console.error("Admin 2-step verify error:", error.message || error);
+    res.status(500).json({ message: "Something went wrong. Please try again." });
+  }
+});
+
+router.post("/login/2fa/resend", async (req, res) => {
+  try {
+    const id = readChallenge(req.body.challenge);
+    const user = id && (await User.findById(id));
+    if (!user) return res.status(401).json({ message: "This login has expired. Please log in again." });
+    const { wait } = await sendTwoStepCode(user);
+    if (wait) return res.status(429).json({ message: `Please wait ${wait} seconds before asking for a new code.`, retryAfter: wait });
+    res.status(200).json({ message: `A new code has been sent to ${maskEmail(user.email)}.` });
+  } catch (error) {
+    console.error("Admin 2-step resend error:", error.message || error);
+    res.status(500).json({ message: "We could not email your login code. Please try again in a minute." });
+  }
+});
+
 // ── Register ──────────────────────────────────────────────────────────────────
 router.post("/register", async (req, res) => {
   try {
@@ -228,6 +337,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).send({ message: "Incorrect email or password" });
     }
     attemptBuckets.delete(limitKey);
+    if (needsTwoStep(user)) return startTwoStep(user, res);
 
     const token = generateToken(user);
     res.cookie("token", token, cookieOptions);
@@ -280,6 +390,7 @@ router.post("/google", async (req, res) => {
     }
 
     if (isNewUser) sendWelcomeSafely(email, user.name);
+    if (needsTwoStep(user)) return startTwoStep(user, res);
 
     const token = generateToken(user);
     res.cookie("token", token, cookieOptions);
@@ -391,6 +502,10 @@ router.post("/otp/verify", async (req, res) => {
     await OtpCode.deleteOne({ email });
 
     let user = await findByEmail(email);
+    // The email code is the admin's second step, so on its own it is not enough
+    if (user && needsTwoStep(user)) {
+      return res.status(403).json({ message: "Admin accounts log in with password or Google, then enter the code we email you." });
+    }
     let isNewUser = false;
     if (!user) {
       user = new User({
