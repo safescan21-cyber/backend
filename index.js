@@ -38,6 +38,8 @@ const serviceRoutes = require("./src/service/serviceRoutes");
 const showcaseRoutes = require("./src/showcase/showcaseRoutes");
 const soldMachineRoutes = require("./src/soldMachines/soldMachineRoutes");
 const chatQaRoutes = require("./src/chatQa/chatQaRoutes");
+const seoAuditRoutes = require("./src/seo/seoAuditRoutes");
+const { startSeoAudit } = require("./src/seo/seoAudit");
 const { startSoldReport } = require("./src/soldMachines/dailyReport");
 const contactRoutes = require("./src/contact/contactRoutes");
 const quoteRoutes = require("./src/users/Quoteroutes");
@@ -141,6 +143,7 @@ app.use("/api/service", serviceRoutes); // service requests, AMC bookings and pl
 app.use("/api/showcase", showcaseRoutes); // factory photos, client installations
 app.use("/api/sold-machines", soldMachineRoutes); // serial numbers of sold machines (admin)
 app.use("/api/chat-qa", chatQaRoutes); // chatbot training questions + answers, unanswered questions
+app.use("/api/seo", seoAuditRoutes); // SEO health check (admin)
 app.use("/api/pharma-apis", require("./src/pharmaApi/pharmaApiRoutes")); // API / bulk drug catalogue
 app.use("/api/testimonials", require("./src/testimonials/testimonialRoutes")); // customer testimonials
 app.use("/", seoRoutes); // /sitemap-content.xml
@@ -242,6 +245,8 @@ const startServer = async () => {
     startFollowUps();
     // Sold machines: daily email with the full history (Excel + PDF)
     startSoldReport();
+    // Continuous SEO: weekly check of every sitemap page, email report, IndexNow ping
+    startSeoAudit();
 
     httpServer.listen(port, host, () => {
       console.log(
