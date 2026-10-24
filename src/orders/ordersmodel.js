@@ -29,6 +29,7 @@ const OrderItemSchema = new mongoose.Schema({
   kind:      { type: String, enum: ["product", "api"], default: "product" }, // machine or pharma API
   unit:      { type: String, default: "" },                                  // kg / g / L for APIs
   slug:      { type: String, default: "" },
+  serialNumbers: { type: [String], default: undefined }, // machines: made when the order ships (soldMachines/serials.js)
 }, { _id: false });
 
 // ── Main Order schema ─────────────────────────────────────────

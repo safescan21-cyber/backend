@@ -26,6 +26,8 @@ const ProductSchema = new mongoose.Schema(
     videos: { type: [String], default: [] },
     color: { type: String, required: true },
     origin: { type: String, trim: true },
+    // Model number (e.g. "ZP-35D"); part of every serial number made when the machine is sold
+    modelNumber: { type: String, trim: true, maxlength: 60, default: '' },
     productType: { type: String, trim: true },
     rating: { type: Number, default: 0 },
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

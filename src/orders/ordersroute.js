@@ -30,6 +30,7 @@ const canSeeOrder = async (req, order) => {
 };
 const { sendInvoiceWhatsApp, sendDispatchWhatsApp } = require("../utils/whatsapp");
 const { priceOrder, priceLines } = require("../offers/coupon");
+const { onOrderStatus } = require("../soldMachines/serials");
 
 // Records the WhatsApp result on the order; never throws.
 const recordWhatsApp = (orderId, sentField, promise) =>
@@ -433,6 +434,17 @@ router.patch("/update-order-status/:id", verifyToken, verifyAdmin, async (req, r
       }
     }
 
+    // Shipped / delivered: a serial number for every machine unit; cancelled / refunded:
+    // its serial numbers are marked cancelled. A problem here never blocks the status change.
+    let serials = [];
+    if (statusChanged) {
+      try {
+        serials = (await onOrderStatus(updatedOrder)).map((r) => r.serialNumber);
+      } catch (err) {
+        console.error(`Serial numbers failed for ${updatedOrder.orderId}:`, err.message);
+      }
+    }
+
     // Dispatch message on WhatsApp
     let whatsapp = null;
     if (updatedOrder.orderStatus === "shipped" && !updatedOrder.whatsapp?.dispatchSentAt) {
@@ -463,6 +475,7 @@ router.patch("/update-order-status/:id", verifyToken, verifyAdmin, async (req, r
       order: updatedOrder,
       whatsapp,
       emailQueued,
+      serials,
     });
   } catch (error) {
     console.error("Error updating order status:", error);

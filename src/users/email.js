@@ -698,7 +698,46 @@ const sendTestimonialNotice = (t) => {
   })); // the queue logs any sending error
 };
 
+// Daily sold-machines report to the admin: the day's new sales in the email, the full
+// history attached as Excel and PDF (soldMachines/dailyReport.js). Resolves with the message id.
+const soldReportTo = () => process.env.SOLD_REPORT_TO || 'safescan21@gmail.com';
+const sendSoldMachinesReport = async ({ fresh, totals, xlsx, pdf, dateLabel }) => {
+  const rows = fresh.map((r) => `
+    <tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;"><strong>${esc(r.serialNumber)}</strong></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;">${esc(r.productName)}${r.modelNumber ? `<br/><span style="color:#888;">${esc(r.modelNumber)}</span>` : ''}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;">${esc(r.customer?.name || '')}${r.customer?.phone ? `<br/><span style="color:#888;">${esc(r.customer.phone)}</span>` : ''}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;">${esc(r.status === 'cancelled' ? 'Cancelled' : r.source === 'manual' ? 'Offline sale' : r.orderNumber)}</td>
+    </tr>`).join('');
+  const info = await transporter.sendMail({
+    from,
+    to: soldReportTo(),
+    subject: `Sold machines ${dateLabel}: ${fresh.length} new, ${totals.active} in total - ${company.name}`,
+    text: [
+      `Sold machines report, ${dateLabel}`,
+      `New since the last report: ${fresh.length}`,
+      ...fresh.map((r) => `- ${r.serialNumber}  ${r.productName}${r.modelNumber ? ` (${r.modelNumber})` : ''}  ${r.customer?.name || ''}`),
+      `Machines sold in total: ${totals.active}${totals.cancelled ? ` (${totals.cancelled} cancelled)` : ''}`,
+      'The full history is attached as Excel and PDF.',
+    ].join('\n'),
+    html: plainWrap(`
+      <h2 style="margin:0 0 6px;font-size:18px;">Sold machines report</h2>
+      <p style="margin:0 0 14px;color:#555;">${esc(dateLabel)}</p>
+      <p><strong>${fresh.length}</strong> new since the last report · <strong>${totals.active}</strong> machines sold in total${totals.cancelled ? ` · ${totals.cancelled} cancelled` : ''}</p>
+      ${fresh.length ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse;margin:8px 0 14px;">
+        <tr style="background:#f1f5f9;"><th align="left" style="padding:6px 8px;">Serial number</th><th align="left" style="padding:6px 8px;">Machine</th><th align="left" style="padding:6px 8px;">Customer</th><th align="left" style="padding:6px 8px;">Order</th></tr>${rows}</table>` : '<p style="color:#555;">No new machines sold since the last report.</p>'}
+      <p>The full history is attached as Excel and PDF. You can also download it any time in the admin dashboard under <strong>Sold Machines</strong>.</p>`),
+    attachments: [
+      { filename: `sold-machines-${dateLabel}.xlsx`, content: xlsx, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+      { filename: `sold-machines-${dateLabel}.pdf`, content: pdf, contentType: 'application/pdf' },
+    ],
+  });
+  return info.messageId;
+};
+
 module.exports = {
+  sendSoldMachinesReport,
+  soldReportTo,
   sendServiceRequestEmails,
   sendServiceUpdateEmail,
   sendQuotationEmail,
