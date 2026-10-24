@@ -131,6 +131,105 @@ router.post("/quick", optionalAuth, async (req, res) => {
   }
 });
 
+// Instant quotation on a machine page: a formal quotation (same PDF as the admin builder)
+// made at once from the price listed in the shop. The price always comes from the database,
+// never from the browser. Saved as a quote request (source "instant", status "quoted"),
+// so the business gets an email and sees it in admin; the customer gets the PDF link
+// (and an email with the PDF when they give an address).
+const INSTANT_GST = 18; // % – same as the website shows before the request (components/quote/InstantQuote.jsx)
+const DEMO_IMAGE = /\/demo-products\//;
+router.post("/instant", optionalAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b.website) return res.status(201).json({ success: true }); // honeypot
+    if (limited(req.ip)) return res.status(429).json({ message: "Too many requests. Please try again in a few minutes." });
+
+    const contact = { name: clean(b.name, 100), company: clean(b.company, 150), email: clean(b.email, 150).toLowerCase(), phone: clean(b.phone, 30), gstin: clean(b.gstin, 20).toUpperCase() };
+    if (!contact.name || !contact.phone) return res.status(400).json({ message: "Please enter your name and phone number." });
+    if (!/^[+\d][\d\s-]{6,}$/.test(contact.phone)) return res.status(400).json({ message: "Please enter a valid phone number." });
+    if (contact.email && !EMAIL_RE.test(contact.email)) return res.status(400).json({ message: "Please enter a valid email address, or leave it empty." });
+    if (contact.gstin && !/^[0-9A-Z]{15}$/.test(contact.gstin)) return res.status(400).json({ message: "GSTIN has 15 letters and digits. Please check it, or leave it empty." });
+    const quantity = Math.floor(Number(b.quantity));
+    if (!(quantity >= 1 && quantity <= 50)) return res.status(400).json({ message: "Quantity must be between 1 and 50. For more, please ask for a bulk quote." });
+
+    const Products = require("../products/productsmodel");
+    const product = /^[a-f0-9]{24}$/i.test(String(b.productId || ""))
+      ? await Products.findById(b.productId).select("name price modelNumber warranty stock active images category").lean()
+      : null;
+    if (!product || product.active === false) return res.status(404).json({ message: "This machine is not available." });
+    if (!(Number(product.price) > 0) || (product.images || []).some((i) => DEMO_IMAGE.test(i))) {
+      return res.status(400).json({ message: "This machine has no listed price. Please ask for a quote and we will send one." });
+    }
+
+    const city = clean(b.city, 100);
+    const q = {
+      number: await newNumber("QT", "quotation.number"),
+      items: [{ name: product.name, quantity, unitPrice: Number(product.price), notes: product.modelNumber ? `Model ${product.modelNumber}` : "" }],
+      gstPercent: INSTANT_GST,
+      freight: 0,
+      deliveryTime: Number(product.stock) >= quantity ? "Ready to dispatch; delivery time confirmed with the order" : "To be confirmed with the order",
+      paymentTerms: "",
+      warranty: Number(product.warranty) > 0 ? `${product.warranty} months` : "",
+      validityDays: 15,
+      notes: "Instant quotation made from the price listed on www.foodpharmamachinery.com. Freight, installation and commissioning are quoted separately. The order is subject to confirmation by Food Pharma Machinery.",
+      publicToken: crypto.randomBytes(16).toString("hex"),
+      updatedAt: new Date(),
+      sentAt: new Date(),
+      sentTo: "",
+    };
+    Object.assign(q, quotationTotals(q));
+
+    const quote = await BulkQuote.create({
+      quoteNumber: await newQuoteNumber(),
+      userId: req.userId ? String(req.userId) : null,
+      contact,
+      items: [{ productId: String(product._id), name: product.name, quantity, notes: product.modelNumber ? `Model ${product.modelNumber}` : "" }],
+      deliveryCity: city,
+      country: "India",
+      message: `Instant quotation ${q.number} from the machine page${city ? `\nCity: ${city}` : ""}`,
+      source: "instant",
+      status: "quoted",
+      origin: cleanOrigin(b.origin),
+      quotation: q,
+    });
+    const link = pdfLink(quote);
+
+    // Business email (always), then the quotation to the customer when they gave an email
+    const record = (fields) => BulkQuote.updateOne({ _id: quote._id }, { $set: fields }).catch(() => {});
+    try {
+      sendBulkQuoteEmails(quote.toObject(), {
+        pdfUrl: link,
+        onAdminSent: () => record({ "emails.adminSentAt": new Date(), "emails.error": "" }),
+        onError: (msg) => record({ "emails.error": msg.slice(0, 300) }),
+      });
+    } catch (mailError) {
+      console.error("Instant quote business email failed:", mailError.message);
+    }
+    let emailed = false;
+    if (contact.email) {
+      try {
+        const pdf = await generateQuotationPdf(quote.toObject());
+        await sendQuotationEmail(quote.toObject(), pdf, link);
+        emailed = true;
+        await record({ "quotation.sentTo": contact.email });
+      } catch (err) {
+        console.error(`Instant quotation ${q.number}: customer email failed:`, err.message);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      quoteNumber: quote.quoteNumber,
+      quotation: { number: q.number, subtotal: q.subtotal, gstPercent: q.gstPercent, gst: q.gst, total: q.total, validityDays: q.validityDays },
+      pdfUrl: link,
+      emailed,
+    });
+  } catch (error) {
+    console.error("Instant quote error:", error);
+    res.status(500).json({ message: "Could not make the quotation right now. Please try again or contact us on WhatsApp." });
+  }
+});
+
 router.post("/", optionalAuth, async (req, res) => {
   try {
     const b = req.body || {};

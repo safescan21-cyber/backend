@@ -406,12 +406,15 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
     from,
     to: adminTo,
     ...(c.email && { replyTo: c.email }),
-    subject: quote.source === 'quick'
+    subject: quote.source === 'instant'
+      ? `Instant quotation ${quote.quotation?.number || quote.quoteNumber} — ${quote.items[0]?.name || 'machine'} x ${quote.items[0]?.quantity || 1} — ${inr(quote.quotation?.total)} — call ${c.phone}`
+      : quote.source === 'quick'
       ? `New quick quote ${quote.quoteNumber} — ${quote.items[0]?.name || 'machine'}${quote.deliveryCity ? ` (${quote.deliveryCity})` : ''} — call ${c.phone}`
       : `New bulk quote ${quote.quoteNumber} — ${quote.items.length} item(s)${c.company ? ` from ${c.company}` : ''}`,
     html: wrap(`
-        <h2 style="margin-top:0;color:#e65100;">New bulk quote request</h2>
+        <h2 style="margin-top:0;color:#e65100;">${quote.source === 'instant' ? 'Instant quotation from the website' : 'New bulk quote request'}</h2>
         <p><strong>${esc(quote.quoteNumber)}</strong></p>
+        ${quote.source === 'instant' && quote.quotation?.number ? `<p style="background:#ecfeff;border-left:4px solid #0891B2;padding:12px;border-radius:4px;">The customer got quotation <strong>${esc(quote.quotation.number)}</strong> at once, made from the listed website price: <strong>${esc(inr(quote.quotation.total))}</strong> incl. ${esc(quote.quotation.gstPercent)}% GST.${hooks.pdfUrl ? ` <a href="${esc(hooks.pdfUrl)}">Open the PDF</a>` : ''} Call them to close the order.</p>` : ''}
         <p>
           <strong>Name:</strong> ${esc(c.name)}<br/>
           ${c.company ? `<strong>Company:</strong> ${esc(c.company)}<br/>` : ''}
@@ -486,7 +489,8 @@ const sendBulkQuoteEmails = (quote, hooks = {}) => {
       throw lastError;
     }
     await hooks.onAdminSent?.();
-    if (!c.email) return; // quick quotes may come without an email address
+    // quick quotes may come without an email address; instant quotes email the quotation itself instead
+    if (!c.email || quote.source === 'instant') return;
 
     try {
       const info = await transporter.sendMail(customerMail);
