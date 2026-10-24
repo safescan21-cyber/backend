@@ -37,6 +37,7 @@ const bulkQuoteRoutes = require("./src/quotes/bulkQuoteRoutes");
 const serviceRoutes = require("./src/service/serviceRoutes");
 const showcaseRoutes = require("./src/showcase/showcaseRoutes");
 const soldMachineRoutes = require("./src/soldMachines/soldMachineRoutes");
+const chatQaRoutes = require("./src/chatQa/chatQaRoutes");
 const { startSoldReport } = require("./src/soldMachines/dailyReport");
 const contactRoutes = require("./src/contact/contactRoutes");
 const quoteRoutes = require("./src/users/Quoteroutes");
@@ -139,6 +140,7 @@ app.use("/api/bulk-quotes", bulkQuoteRoutes);
 app.use("/api/service", serviceRoutes); // service requests, AMC bookings and plans
 app.use("/api/showcase", showcaseRoutes); // factory photos, client installations
 app.use("/api/sold-machines", soldMachineRoutes); // serial numbers of sold machines (admin)
+app.use("/api/chat-qa", chatQaRoutes); // chatbot training questions + answers, unanswered questions
 app.use("/api/pharma-apis", require("./src/pharmaApi/pharmaApiRoutes")); // API / bulk drug catalogue
 app.use("/api/testimonials", require("./src/testimonials/testimonialRoutes")); // customer testimonials
 app.use("/", seoRoutes); // /sitemap-content.xml
