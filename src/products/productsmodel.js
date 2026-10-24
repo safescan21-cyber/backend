@@ -19,7 +19,8 @@ const ProductSchema = new mongoose.Schema(
     name: { type: String, required: true },
     category: { type: String, required: true },
     description: { type: String, required: true },
-    price: { type: Number, required: true },
+    // Empty / 0 = no listed price: the website shows "Contact for price" and it can't be bought online
+    price: { type: Number, default: 0, min: 0, set: (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? 0 : Number(v)) },
     oldPrice: { type: Number },
     images: { type: [String], required: true },
     // Product videos (Cloudinary URLs) — the admin form uploads these
@@ -28,6 +29,10 @@ const ProductSchema = new mongoose.Schema(
     origin: { type: String, trim: true },
     // Model number (e.g. "ZP-35D"); part of every serial number made when the machine is sold
     modelNumber: { type: String, trim: true, maxlength: 60, default: '' },
+    // Who makes the machine (shown on the product page and spec sheet)
+    manufacturer: { type: String, trim: true, maxlength: 120, default: '' },
+    // A discount code (Admin → Discount Offers) to show on this product while it is valid
+    couponCode: { type: String, trim: true, uppercase: true, maxlength: 30, default: '' },
     productType: { type: String, trim: true },
     rating: { type: Number, default: 0 },
     author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
