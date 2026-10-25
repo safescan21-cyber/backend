@@ -230,4 +230,22 @@ const generateQuotationPdf = (quote) =>
     doc.end();
   });
 
-module.exports = { generateQuotationPdf, quotationTotals: totals, amountInWords };
+// File name: "PureLine Machinery Pvt. Ltd. - D Tooling for Press Machine - 25-Oct-2026.pdf"
+const quotationFileName = (quote) => {
+  const q = quote.quotation || {};
+  const items = q.items || [];
+  const product = items.length > 1 ? `${items[0].name} and ${items.length - 1} more` : items[0]?.name || "Quotation";
+  const d = new Date(q.sentAt || q.updatedAt || Date.now());
+  const date = `${String(d.getDate()).padStart(2, "0")}-${d.toLocaleString("en-GB", { month: "short" })}-${d.getFullYear()}`;
+  const clean = (s) => String(s).replace(/[\\/:*?"<>|\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return `${clean(company.name)} - ${clean(product).slice(0, 80)} - ${date}.pdf`;
+};
+
+// Content-Disposition with that name (an ASCII copy for old programs, the exact name for the rest)
+const pdfDisposition = (quote, type = "inline") => {
+  const name = quotationFileName(quote);
+  const ascii = name.replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "").replace(/"/g, "");
+  return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+};
+
+module.exports = { generateQuotationPdf, quotationTotals: totals, amountInWords, quotationFileName, pdfDisposition };

@@ -2,6 +2,7 @@
 const nodemailer = require('nodemailer');
 const { generateInvoicePdf } = require('../orders/invoice');
 const company = require('../utils/company');
+const { quotationFileName } = require('../quotes/quotationPdf');
 
 // ─── SMTP Transporter with connection pooling ───
 const transporter = nodemailer.createTransport({
@@ -544,7 +545,7 @@ const sendQuotationEmail = async (quote, pdf, pdfUrl) => {
       ${pdfUrl ? `<p><a href="${esc(pdfUrl)}" style="background:#0891B2;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;">Open the quotation (PDF)</a></p>` : ''}
       <p>Questions or changes? Simply reply to this email or call/WhatsApp <a href="tel:${esc(company.phone.replace(/\s/g, ''))}">${esc(company.phone)}</a>.</p>
       <p>Regards,<br/><strong>${esc(company.name)}</strong></p>`),
-    attachments: [{ filename: `Quotation-${q.number}.pdf`, content: pdf, contentType: 'application/pdf' }],
+    attachments: [{ filename: quotationFileName(quote), content: pdf, contentType: 'application/pdf' }],
   });
   return info.messageId;
 };

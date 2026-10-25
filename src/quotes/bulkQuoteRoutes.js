@@ -15,7 +15,7 @@ const User = require("../users/Usermodel");
 const { verifyToken, verifyAdmin, optionalAuth } = require("../middlewere/authMiddleware");
 const crypto = require("crypto");
 const { sendBulkQuoteEmails, sendQuotationEmail } = require("../users/email");
-const { generateQuotationPdf, quotationTotals } = require("./quotationPdf");
+const { generateQuotationPdf, quotationTotals, pdfDisposition } = require("./quotationPdf");
 const { toWhatsAppNumber } = require("../utils/whatsapp");
 
 // Public address of this API, for the quotation link in emails and WhatsApp messages
@@ -417,7 +417,7 @@ router.get("/:id/quotation.pdf", verifyToken, verifyAdmin, async (req, res) => {
     if (!quote?.quotation?.number) return res.status(404).json({ message: "No quotation saved yet" });
     const pdf = await generateQuotationPdf(quote);
     res.set("Content-Type", "application/pdf");
-    res.set("Content-Disposition", `inline; filename="Quotation-${quote.quotation.number}.pdf"`);
+    res.set("Content-Disposition", pdfDisposition(quote));
     res.send(pdf);
   } catch (error) {
     res.status(500).json({ message: "Could not create the PDF" });
@@ -472,7 +472,7 @@ router.get("/q/:token.pdf", async (req, res) => {
     if (!quote?.quotation?.number) return res.status(404).send("Not found");
     const pdf = await generateQuotationPdf(quote);
     res.set("Content-Type", "application/pdf");
-    res.set("Content-Disposition", `inline; filename="Quotation-${quote.quotation.number}.pdf"`);
+    res.set("Content-Disposition", pdfDisposition(quote));
     res.set("X-Robots-Tag", "noindex");
     res.set("Cache-Control", "private, no-store");
     res.send(pdf);
