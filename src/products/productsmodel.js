@@ -22,7 +22,8 @@ const ProductSchema = new mongoose.Schema(
     // Empty / 0 = no listed price: the website shows "Contact for price" and it can't be bought online
     price: { type: Number, default: 0, min: 0, set: (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? 0 : Number(v)) },
     oldPrice: { type: Number },
-    images: { type: [String], required: true },
+    // (required alone lets an empty list through: Mongoose fills arrays with [])
+    images: { type: [String], required: true, validate: { validator: (v) => Array.isArray(v) && v.some((u) => String(u || '').trim()), message: 'At least one image is required' } },
     // Product videos (Cloudinary URLs) — the admin form uploads these
     videos: { type: [String], default: [] },
     color: { type: String, required: true },
