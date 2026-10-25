@@ -25,7 +25,7 @@ Products.findByIdAndUpdate = async (id, body, options) => {
   return { _id: id, ...body };
 };
 
-const router = require("../src/products/productsroute");
+const router = require("../src/products/productsRoute");
 const app = express().use(express.json()).use("/api/products", router);
 const server = app.listen(0);
 const base = `http://127.0.0.1:${server.address().port}/api/products`;

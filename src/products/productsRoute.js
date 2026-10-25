@@ -17,6 +17,15 @@ const withCleanDocuments = (body) => {
   return out;
 };
 
+// A form mistake (missing field, wrong number…) as a 400 the admin can read, e.g.
+// "Please check: images (required), specifications.0.value (required)"; null for other errors
+const formProblem = (error) => {
+  if (error?.name === "CastError") return `Please check: ${error.path} (not a valid value)`;
+  if (error?.name !== "ValidationError") return null;
+  const fields = Object.entries(error.errors || {}).map(([field, e]) => `${field} (${e.kind === "required" ? "required" : e.kind === "min" ? "too small" : e.kind === "user defined" ? e.message : e.kind === "maxlength" ? "too long" : "not valid"})`);
+  return `Please check: ${fields.join(", ")}`;
+};
+
 // Products the public may see (older products have no flag yet = visible)
 const VISIBLE = { active: { $ne: false } };
 const isAdminRequest = (req) => userFromRequest(req)?.role === 'admin';
@@ -41,8 +50,10 @@ router.post("/create-product", verifyToken, verifyAdmin, async (req, res) => {
     pingIndexNow([`/shop/${savedproduct._id}`, '/shop']);
     res.status(201).send(savedproduct);
   } catch (error) {
+    const problem = formProblem(error);
+    if (problem) return res.status(400).send({ message: problem });
     console.error("Error creating new product", error);
-    res.status(500).send({ message: error.message || "Failed to create new product" });
+    res.status(500).send({ message: "Failed to create new product" });
   }
 });
 
@@ -140,7 +151,7 @@ router.patch("/update-product/:id", verifyToken, verifyAdmin, async (req, res) =
     const updatedProduct = await Products.findByIdAndUpdate(
       productId,
       withCleanDocuments(req.body),
-      { new: true }
+      { new: true, runValidators: true } // same checks as when the product was added
     );
 
     if (!updatedProduct) {
@@ -153,6 +164,8 @@ router.patch("/update-product/:id", verifyToken, verifyAdmin, async (req, res) =
       product: updatedProduct,
     });
   } catch (error) {
+    const problem = formProblem(error);
+    if (problem) return res.status(400).send({ message: problem });
     console.error("Error updating the product", error);
     res.status(500).send({ message: "Failed to update the product" });
   }
