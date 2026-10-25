@@ -8,7 +8,8 @@ const { pingIndexNow } = require("../utils/indexnow");
 
 const SITE = "https://www.foodpharmamachinery.com";
 const MARKER = "seo-weekly-audit";
-const LOCALES = /^https:\/\/www\.foodpharmamachinery\.com\/(en-us|en-gb|fr|ja|ko|ur)(\/|$)/;
+// Country versions (keep in step with frontend-next/src/i18n/locales.js)
+const LOCALES = /^https:\/\/www\.foodpharmamachinery\.com\/(en-us|en-gb|en-au|fr|ja|ko|ur)(\/|$)/;
 
 const decode = (s) => String(s || "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 const attr = (tag, name) => (tag.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, "i")) || [])[1];
