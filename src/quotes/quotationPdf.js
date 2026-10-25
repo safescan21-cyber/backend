@@ -72,9 +72,13 @@ const generateQuotationPdf = (quote) =>
     const headWidth = width * 0.58 - (textLeft - left);
     doc.fontSize(16).font("Helvetica-Bold").fillColor(INK).text(company.name, textLeft, 46, { width: headWidth });
     doc.fontSize(9).font("Helvetica").fillColor("#555");
-    [company.address, company.phone && `Phone / WhatsApp: ${company.phone}`, company.email && `Email: ${company.email}`, `Website: ${site}`, company.gstin && `GSTIN: ${company.gstin}`]
+    [company.address, company.phone && `Phone / WhatsApp: ${company.phone}`, company.email && `Email: ${company.email}`]
       .filter(Boolean)
       .forEach((line) => doc.text(line, textLeft, undefined, { width: headWidth }));
+    // the website as a link (opens the site when clicked in the PDF)
+    doc.text("Website: ", textLeft, undefined, { continued: true })
+      .fillColor(BRAND).text(site, { link: company.website, underline: true, continued: !!company.gstin }).fillColor("#555");
+    if (company.gstin) doc.text("", { continued: false }).text(`GSTIN: ${company.gstin}`, textLeft, undefined, { width: headWidth });
     const headerBottom = Math.max(doc.y, 44 + logoSize);
 
     const issued = q.sentAt || q.updatedAt || new Date();
@@ -178,7 +182,18 @@ const generateQuotationPdf = (quote) =>
       y = doc.y + 3;
     });
     if (q.notes) {
-      doc.moveDown(0.4).fontSize(9).font("Helvetica").fillColor("#333").text(q.notes, left, undefined, { width });
+      // The website in the notes ("…price listed on www.foodpharmamachinery.com…") becomes a link
+      doc.moveDown(0.4).fontSize(9).font("Helvetica").fillColor("#333");
+      const parts = String(q.notes).split(/((?:https?:\/\/)?www\.foodpharmamachinery\.com)/i);
+      // (position and width only on the first piece: repeating them restarts the line in pdfkit)
+      parts.forEach((part, i) => {
+        const continued = i < parts.length - 1;
+        const style = i % 2 ? { link: company.website, underline: true } : { link: null, underline: false };
+        doc.fillColor(i % 2 ? BRAND : "#333");
+        if (i === 0) doc.text(part, left, doc.y, { width, continued, ...style });
+        else doc.text(part, { continued, ...style });
+      });
+      doc.fillColor("#333");
       y = doc.y;
     }
 
@@ -190,7 +205,8 @@ const generateQuotationPdf = (quote) =>
     doc.fillColor(INK).font("Helvetica-Bold").fontSize(9.5).text("Customer support", left + 10, y + 8);
     doc.font("Helvetica").fontSize(9).fillColor("#333")
       .text(`WhatsApp / Call: ${SUPPORT}`, left + 10, y + 22, { width: boxW - 20 })
-      .text([company.email, site].filter(Boolean).join("  |  "), left + 10, y + 36, { width: boxW - 20 });
+      .text(company.email ? `${company.email}  |  ` : "", left + 10, y + 36, { width: boxW - 20, continued: true })
+      .fillColor(BRAND).text(site, { link: company.website, underline: true }).fillColor("#333");
     const signX = left + width * 0.62;
     doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#1a1a1a").text(`For ${company.name}`, signX, y + 4, { width: right - signX, align: "right" });
     doc.moveTo(signX + 30, y + 46).lineTo(right, y + 46).strokeColor("#999").stroke();
@@ -204,7 +220,10 @@ const generateQuotationPdf = (quote) =>
       doc.moveTo(left, footY).lineTo(right, footY).strokeColor("#ddd").stroke();
       doc.fontSize(9).font("Helvetica-Bold").fillColor(INK).text(company.name, left, footY + 10, { width, align: "center", lineBreak: false });
       doc.fontSize(8).font("Helvetica").fillColor("#666")
-        .text([company.address, `WhatsApp ${SUPPORT}`, site].filter(Boolean).join("  |  "), left, footY + 24, { width, align: "center", lineBreak: false })
+        .text([company.address, `WhatsApp ${SUPPORT}`, site].filter(Boolean).join("  |  "), left, footY + 24, { width, align: "center", lineBreak: false });
+      // the whole footer line links to the website (pdfkit can't link part of a centred line)
+      doc.link(left, footY + 22, width, 12, company.website);
+      doc.fontSize(8).font("Helvetica")
         .fillColor("#888")
         .text(`Prices in Indian Rupees. Computer-generated quotation.${range.count > 1 ? `  Page ${i + 1} of ${range.count}` : ""}`, left, footY + 38, { width, align: "center", lineBreak: false });
     }
