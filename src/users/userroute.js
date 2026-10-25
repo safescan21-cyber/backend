@@ -619,10 +619,18 @@ router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
 router.put("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const { name, email, profilePicture, bio, profession, role } = req.body;
+    if (role !== undefined && !["user", "admin"].includes(role)) return res.status(400).json({ message: "Role must be user or admin" });
+    // Never take away the last admin: nobody could open the dashboard any more
+    if (role === "user") {
+      const target = await User.findById(req.params.id).select("role").lean();
+      if (target?.role === "admin" && (await User.countDocuments({ role: "admin" })) <= 1) {
+        return res.status(400).json({ message: "This is the only admin. Make someone else admin first." });
+      }
+    }
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { name, email, profilePicture, bio, profession, role },
-      { new: true }
+      { new: true, runValidators: true }
     ).select("-password");
     if (!user) return res.status(404).json({ message: "User not found" });
     res.status(200).json({ message: "User updated successfully", user: toClientUser(user) });
@@ -634,6 +642,12 @@ router.put("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
 // ── Delete user ───────────────────────────────────────────────────────────────
 router.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
+    // Not your own account, and never the last admin (nobody could log in to the dashboard)
+    if (String(req.params.id) === String(req.userId)) return res.status(400).json({ message: "You can't delete your own account here." });
+    const target = await User.findById(req.params.id).select("role").lean();
+    if (target?.role === "admin" && (await User.countDocuments({ role: "admin" })) <= 1) {
+      return res.status(400).json({ message: "This is the only admin and can't be deleted." });
+    }
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
     res.status(200).json({ message: "User deleted successfully" });
