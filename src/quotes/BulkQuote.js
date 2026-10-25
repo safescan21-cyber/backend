@@ -58,6 +58,9 @@ const bulkQuoteSchema = new mongoose.Schema(
           quantity:  { type: Number, min: 1, max: 1000000, default: 1 },
           unitPrice: { type: Number, min: 0, default: 0 },          // INR, before GST
           notes:     { type: String, trim: true, maxlength: 500, default: "" },
+          // The machine's description and key specifications from the shop (instant quotations)
+          description: { type: String, trim: true, maxlength: 1500, default: "" },
+          specs: { type: [{ _id: false, key: { type: String, maxlength: 80 }, value: { type: String, maxlength: 160 } }], default: [] },
         },
       ],
       gstPercent:   { type: Number, min: 0, max: 28, default: 18 },

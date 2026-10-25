@@ -137,6 +137,17 @@ router.post("/quick", optionalAuth, async (req, res) => {
 // so the business gets an email and sees it in admin; the customer gets the PDF link
 // (and an email with the PDF when they give an address).
 const INSTANT_GST = 18; // % – same as the website shows before the request (components/quote/InstantQuote.jsx)
+const INSTANT_VALIDITY_DAYS = 30; // instant quotations (chat and machine pages) are valid 30 days
+// The machine's description for the quotation: plain text, without photo/video credits or
+// test notes some descriptions carry, at most about 600 characters
+const quoteDescription = (html) => {
+  const text = String(html || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  const keep = (text.match(/[^.!?]+[.!?]+/g) || [text]).map((s) => s.trim())
+    .filter((s) => s && !/video:|photo:|image:|cc by|wikimedia|shown to test|demo product|not for sale/i.test(s));
+  let out = "";
+  for (const s of keep) { if ((out + " " + s).length > 600) break; out = out ? `${out} ${s}` : s; }
+  return out;
+};
 router.post("/instant", optionalAuth, async (req, res) => {
   try {
     const b = req.body || {};
@@ -153,7 +164,7 @@ router.post("/instant", optionalAuth, async (req, res) => {
 
     const Products = require("../products/productsmodel");
     const product = /^[a-f0-9]{24}$/i.test(String(b.productId || ""))
-      ? await Products.findById(b.productId).select("name price modelNumber warranty stock active images category").lean()
+      ? await Products.findById(b.productId).select("name price modelNumber warranty stock active images category description specifications").lean()
       : null;
     if (!product || product.active === false) return res.status(404).json({ message: "This machine is not available." });
     // Every shop machine with a listed price can be quoted (the first 6, whose photos are in
@@ -165,13 +176,17 @@ router.post("/instant", optionalAuth, async (req, res) => {
     const city = clean(b.city, 100);
     const q = {
       number: await newNumber("QT", "quotation.number"),
-      items: [{ name: product.name, quantity, unitPrice: Number(product.price), notes: product.modelNumber ? `Model ${product.modelNumber}` : "" }],
+      items: [{
+        name: product.name, quantity, unitPrice: Number(product.price), notes: product.modelNumber ? `Model ${product.modelNumber}` : "",
+        description: quoteDescription(product.description),
+        specs: (product.specifications || []).filter((s) => s?.key && s?.value).slice(0, 8).map((s) => ({ key: String(s.key).slice(0, 80), value: String(s.value).slice(0, 160) })),
+      }],
       gstPercent: INSTANT_GST,
       freight: 0,
       deliveryTime: Number(product.stock) >= quantity ? "Ready to dispatch; delivery time confirmed with the order" : "To be confirmed with the order",
       paymentTerms: "",
       warranty: Number(product.warranty) > 0 ? `${product.warranty} months` : "",
-      validityDays: 15,
+      validityDays: INSTANT_VALIDITY_DAYS,
       notes: "Instant quotation made from the price listed on www.foodpharmamachinery.com. Freight, installation and commissioning are quoted separately. The order is subject to confirmation by Food Pharma Machinery.",
       publicToken: crypto.randomBytes(16).toString("hex"),
       updatedAt: new Date(),
