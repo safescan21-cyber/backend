@@ -17,7 +17,6 @@ const PressRelease = require("../press/PressRelease");
 const SITE = "https://www.foodpharmamachinery.com";
 const SITE_NAME = "Food Pharma Machinery";
 const SHELL_PATH = process.env.SITE_SHELL_PATH || "/var/www/foodpharma/index.html";
-const DEMO_MATCH = /\/demo-products\//; // demo products (scripts/seed-demo-products.js) stay out of Google
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const plain = (html) => String(html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -141,7 +140,6 @@ router.get("/seo-shell/shop/:id", async (req, res) => {
       image: images[0],
       type: "product",
       jsonLd: [productLd, breadcrumbLd(path)],
-      noindex: images.some((u) => DEMO_MATCH.test(u)),
       body,
     }));
   } catch (error) {

@@ -18,8 +18,8 @@ router.get("/sitemap-content.xml", async (req, res) => {
   try {
     const [press, products, apis] = await Promise.all([
       PressRelease.find({ isActive: true }).select("_id updatedAt publishedDate").sort({ publishedDate: -1 }).limit(5000).lean(),
-      // demo products stay out of Google
-      Products.find({ images: { $not: /\/demo-products\// }, active: { $ne: false } }).select("_id updatedAt createdAt").limit(5000).lean(),
+      // every active shop machine (the 6 with photos in the "demo-products" folder are real too)
+      Products.find({ active: { $ne: false } }).select("_id updatedAt createdAt").limit(5000).lean(),
       PharmaApi.find({ active: true }).select("slug updatedAt").limit(5000).lean(),
     ]);
     const items = [
@@ -29,7 +29,7 @@ router.get("/sitemap-content.xml", async (req, res) => {
     ];
     // The catalogue pages are always listed too, dated by their newest item: Google
     // rejects a sitemap without any <url> ("Missing XML tag"), e.g. while the shop
-    // only has demo products. (They are also in the website's own sitemap.xml.)
+    // is empty. (They are also in the website's own sitemap.xml.)
     const newest = (list) => list.map((u) => u.lastmod).sort().pop();
     const catalogue = [
       { loc: `${SITE}/shop`, lastmod: newest(items.filter((u) => u.loc.includes("/shop/"))), priority: "0.9" },
