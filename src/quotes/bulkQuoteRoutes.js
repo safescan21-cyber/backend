@@ -137,7 +137,6 @@ router.post("/quick", optionalAuth, async (req, res) => {
 // so the business gets an email and sees it in admin; the customer gets the PDF link
 // (and an email with the PDF when they give an address).
 const INSTANT_GST = 18; // % – same as the website shows before the request (components/quote/InstantQuote.jsx)
-const DEMO_IMAGE = /\/demo-products\//;
 router.post("/instant", optionalAuth, async (req, res) => {
   try {
     const b = req.body || {};
@@ -157,7 +156,9 @@ router.post("/instant", optionalAuth, async (req, res) => {
       ? await Products.findById(b.productId).select("name price modelNumber warranty stock active images category").lean()
       : null;
     if (!product || product.active === false) return res.status(404).json({ message: "This machine is not available." });
-    if (!(Number(product.price) > 0) || (product.images || []).some((i) => DEMO_IMAGE.test(i))) {
+    // Every shop machine with a listed price can be quoted (the first 6, whose photos are in
+    // the "demo-products" folder, are real machines with real prices: owner, 24 Oct 2026)
+    if (!(Number(product.price) > 0)) {
       return res.status(400).json({ message: "This machine has no listed price. Please ask for a quote and we will send one." });
     }
 
