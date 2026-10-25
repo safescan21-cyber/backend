@@ -31,6 +31,9 @@ const ProductSchema = new mongoose.Schema(
     modelNumber: { type: String, trim: true, maxlength: 60, default: '' },
     // Who makes the machine (shown on the product page and spec sheet)
     manufacturer: { type: String, trim: true, maxlength: 120, default: '' },
+    // Google description (meta description): set when an admin approves a draft on the SEO
+    // Health page (src/seo/metaDrafts.js); empty = the start of the description is used
+    metaDescription: { type: String, trim: true, maxlength: 170, default: '' },
     // A discount code (Admin → Discount Offers) to show on this product while it is valid
     couponCode: { type: String, trim: true, uppercase: true, maxlength: 30, default: '' },
     productType: { type: String, trim: true },

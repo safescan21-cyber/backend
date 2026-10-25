@@ -87,7 +87,7 @@ router.get("/seo-shell/shop/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const p = isId(id)
-      ? await Products.findById(id).select("name description price oldPrice images category stock specifications").lean()
+      ? await Products.findById(id).select("name description metaDescription price oldPrice images category stock specifications").lean()
       : null;
     if (!p) return notFound(res, "Product");
 
@@ -135,7 +135,7 @@ router.get("/seo-shell/shop/:id", async (req, res) => {
 
     send(res, 200, renderShell({
       title: `${p.name} | ${SITE_NAME}`, // same title the app sets
-      description: clip(text || `${p.name} for pharma and food manufacturing. Price, specifications and quote from ${SITE_NAME}.`, 158),
+      description: p.metaDescription || clip(text || `${p.name} for pharma and food manufacturing. Price, specifications and quote from ${SITE_NAME}.`, 158),
       url,
       image: images[0],
       type: "product",

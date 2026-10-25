@@ -132,6 +132,16 @@ const runWeeklyIfDue = async () => {
     try { await JobMarker.create({ _id: MARKER, value: week, at: new Date() }); } catch { return null; }
   }
   const r = await runAudit();
+  // Our model drafts Google descriptions for machines that need one; the admin approves them
+  try {
+    const { runMetaDrafts, MetaDraft } = require("./metaDrafts");
+    const d = await runMetaDrafts();
+    const waiting = await MetaDraft.countDocuments({ status: "pending" });
+    if (waiting) r.site.push({ text: `${waiting} machine description draft(s) written by our model are waiting for approval: Dashboard → SEO Health.` });
+    console.log(`[seo-audit] description drafts: ${d.drafted} new, ${d.skipped.length} skipped`);
+  } catch (err) {
+    console.error("[seo-audit] description drafts failed:", err.message);
+  }
   try {
     await emailReport(r);
   } catch (err) {
