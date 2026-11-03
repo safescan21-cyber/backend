@@ -11,7 +11,7 @@ fake("middlewere/authMiddleware.js", {
   verifyAdmin: (req, res, next) => next(),
   userFromRequest: () => ({ role: "admin" }),
 });
-fake("utils/indexnow.js", { pingIndexNow: () => {} });
+fake("utils/indexnow.js", { pingIndexNow: () => {}, productPaths: () => [] });
 
 const Products = require("../src/products/productsmodel");
 const Reviews = require("../src/review/reviewsmodel");
