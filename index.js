@@ -140,7 +140,7 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/bulk-quotes", bulkQuoteRoutes);
-app.use("/api/geo", geoRoutes); // rough city for the chat greeting
+app.use("/api/geo", geoRoutes); // rough state for the chat greeting
 app.use("/api/service", serviceRoutes); // service requests, AMC bookings and plans
 app.use("/api/showcase", showcaseRoutes); // factory photos, client installations
 app.use("/api/sold-machines", soldMachineRoutes); // serial numbers of sold machines (admin)
