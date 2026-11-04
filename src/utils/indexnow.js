@@ -20,7 +20,7 @@ const pingIndexNow = (paths = []) => {
 // Every page a shop machine appears on, for pinging when it is added, changed or removed:
 // its own page in each country version, the shop, /products and its category page, and the
 // pharma / food machinery pages (their machine lists come from the shop)
-const COUNTRY_VERSIONS = ["", "/en-us", "/en-gb", "/en-au", "/fr", "/ja", "/ko", "/ur"]; // frontend-next src/i18n/locales.js
+const COUNTRY_VERSIONS = ["", "/en-us", "/en-gb", "/en-au", "/fr", "/ja", "/ko", "/ur", "/hi"]; // frontend-next src/i18n/locales.js
 // Shop category -> its /products/<page> on the website (frontend-next productCategoryData.js)
 const CATEGORY_PAGE = {
   "tablet-press": "tablet-press", tooling: "tablet-press", "capsule-filling": "capsule-filling",
