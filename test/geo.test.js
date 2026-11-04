@@ -8,12 +8,13 @@ const server = app.listen(0);
 test.after(() => server.close());
 const near = async (lat, lon) => {
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/geo/near`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lat, lon }) });
-  return (await res.json()).city;
+  const body = await res.json();
+  return body.city && `${body.city}, ${body.region}`;
 };
 
 test("geo: a position in India gives the nearest city, without accents", async () => {
-  assert.equal(await near(29.945, 78.164), "Haridwar");
-  assert.equal(await near(29.39, 76.97), "Panipat");
+  assert.equal(await near(29.945, 78.164), "Haridwar, UT");
+  assert.equal(await near(29.39, 76.97), "Panipat, HR");
 });
 
 test("geo: outside India or bad input gives no city", async () => {
