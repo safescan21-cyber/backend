@@ -4,7 +4,7 @@ const router = express.Router();
 const Products = require('../products/productsmodel');
 const { verifyToken, verifyAdmin, userFromRequest } = require('../middlewere/authMiddleware');
 const Reviews = require('../review/reviewsmodel');
-const { pingIndexNow } = require("../utils/indexnow");
+const { pingIndexNow, productPaths } = require("../utils/indexnow");
 const { cacheGet, clearOnWrite } = require("../utils/cache");
 const { cleanDocuments } = require("../documents/documentFiles");
 
@@ -47,7 +47,8 @@ router.post("/create-product", verifyToken, verifyAdmin, async (req, res) => {
       await savedproduct.save();
     }
 
-    pingIndexNow([`/shop/${savedproduct._id}`, '/shop']);
+    // the machine's pages and the lists it appears on, so search engines crawl them now
+    if (savedproduct.active !== false) pingIndexNow(productPaths(savedproduct));
     res.status(201).send(savedproduct);
   } catch (error) {
     const problem = formProblem(error);
@@ -158,7 +159,8 @@ router.patch("/update-product/:id", verifyToken, verifyAdmin, async (req, res) =
       return res.status(404).send({ message: "Product not found" });
     }
 
-    pingIndexNow([`/shop/${updatedProduct._id}`]);
+    // also when it was hidden: the lists change and search engines should drop its page
+    pingIndexNow(productPaths(updatedProduct));
     res.status(200).send({
       message: "Product updated successfully",
       product: updatedProduct,
@@ -181,6 +183,7 @@ router.delete("/:id", verifyToken, verifyAdmin, async (req, res) => {
     }
 
     await Reviews.deleteMany({ productId: productId });
+    pingIndexNow(productPaths(deletedProduct)); // gone: search engines recrawl and drop it
 
     res.status(200).send({
       message: "Product deleted successfully",
