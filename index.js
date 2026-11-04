@@ -35,6 +35,7 @@ const offerRoutes = require("./src/offers/offerRoutes");
 const seoRoutes = require("./src/seo/seoRoutes");
 const bulkQuoteRoutes = require("./src/quotes/bulkQuoteRoutes");
 const serviceRoutes = require("./src/service/serviceRoutes");
+const geoRoutes = require("./src/geo/geoRoutes");
 const showcaseRoutes = require("./src/showcase/showcaseRoutes");
 const soldMachineRoutes = require("./src/soldMachines/soldMachineRoutes");
 const chatQaRoutes = require("./src/chatQa/chatQaRoutes");
@@ -139,6 +140,7 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/bulk-quotes", bulkQuoteRoutes);
+app.use("/api/geo", geoRoutes); // rough city for the chat greeting
 app.use("/api/service", serviceRoutes); // service requests, AMC bookings and plans
 app.use("/api/showcase", showcaseRoutes); // factory photos, client installations
 app.use("/api/sold-machines", soldMachineRoutes); // serial numbers of sold machines (admin)
