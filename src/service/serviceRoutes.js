@@ -1,5 +1,6 @@
 // Service requests and AMC (annual maintenance contract) bookings, plus AMC plans
 //   POST   /api/service/requests            anyone (logged in or not) — spam-protected
+//   POST   /api/service/requests/pcb        anyone: PCB repair request with up to 5 photos
 //   GET    /api/service/requests/mine       logged-in customer's own requests (with timeline)
 //   GET    /api/service/requests            admin: list, filter by status / type, search
 //   PATCH  /api/service/requests/:id        admin: status, visit date, note to customer, private notes
@@ -9,6 +10,9 @@
 //   PATCH  /api/service/amc-plans/:id       admin: change a plan
 //   DELETE /api/service/amc-plans/:id       admin: delete a plan
 const router = require("express").Router();
+const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
+require("../utils/uploadImage"); // sets up Cloudinary
 const ServiceRequest = require("./ServiceRequest");
 const { STATUSES } = require("./ServiceRequest");
 const AmcPlan = require("./AmcPlan");
@@ -110,6 +114,52 @@ router.post("/requests", optionalAuth, async (req, res) => {
   }
 });
 
+// PCB repair: photos come with the form (visitors need no account). Images only, in memory, and
+// the same spam limit as other requests.
+const pcbUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 6 * 1024 * 1024, files: 5 },
+  fileFilter: (req, file, cb) => (/^image\/(jpeg|png|webp)$/.test(file.mimetype) ? cb(null, true) : cb(new Error("Photos must be JPG, PNG or WebP."))),
+}).array("photos", 5);
+
+const uploadPhoto = (buffer) => new Promise((resolve, reject) => {
+  cloudinary.uploader.upload_stream({ resource_type: "image", folder: "pcb-repair" }, (error, result) => (error || !result?.secure_url ? reject(error || new Error("No URL")) : resolve(result.secure_url))).end(buffer);
+});
+
+router.post("/requests/pcb", (req, res) => {
+  if (limited(req.ip)) return res.status(429).json({ message: "Too many requests. Please try again in a few minutes or call us." });
+  pcbUpload(req, res, async (uploadError) => {
+    if (uploadError) return res.status(400).json({ message: uploadError.code === "LIMIT_FILE_SIZE" ? "Each photo must be under 6 MB." : uploadError.code === "LIMIT_FILE_COUNT" ? "Please send at most 5 photos." : uploadError.message });
+    try {
+      const b = req.body || {};
+      if (b.website) return res.status(201).json({ success: true, number: "SR-RECEIVED" }); // honeypot: bots fill this
+      const contact = { name: clean(b.name, 100), company: clean(b.company, 150), phone: clean(b.phone, 30), email: clean(b.email, 150).toLowerCase() };
+      if (!contact.name || !PHONE_RE.test(contact.phone)) return res.status(400).json({ message: "Please enter your name and a valid phone number." });
+      if (contact.email && !EMAIL_RE.test(contact.email)) return res.status(400).json({ message: "Please enter a valid email address, or leave it empty." });
+      const issue = text(b.issue, 3000);
+      if (issue.length < 10) return res.status(400).json({ message: "Please tell us what is wrong with the PCB (at least a sentence)." });
+      if (!req.files?.length) return res.status(400).json({ message: "Please add at least one photo of the PCB." });
+
+      const photos = await Promise.all(req.files.map((f) => uploadPhoto(f.buffer)));
+      const request = await ServiceRequest.create({
+        number: await newNumber(),
+        type: "pcb",
+        contact,
+        machine: { name: clean(b.board, 100) || "PCB", model: clean(b.machine, 100) },
+        issue,
+        photos,
+        city: clean(b.city, 100),
+        updates: [{ status: "open", note: "PCB repair request received" }],
+      });
+      notify(request);
+      res.status(201).json({ success: true, number: request.number });
+    } catch (error) {
+      console.error("PCB repair request error:", error);
+      res.status(500).json({ message: "Could not send your request right now. Please call or WhatsApp us." });
+    }
+  });
+});
+
 router.get("/requests/mine", verifyToken, async (req, res) => {
   try {
     const me = await User.findById(req.userId).select("email").lean().catch(() => null);
@@ -126,7 +176,7 @@ router.get("/requests", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const filter = {};
     if (STATUSES.includes(req.query.status)) filter.status = req.query.status;
-    if (["service", "amc"].includes(req.query.type)) filter.type = req.query.type;
+    if (["service", "amc", "pcb"].includes(req.query.type)) filter.type = req.query.type;
     const q = clean(req.query.q, 100);
     if (q) {
       const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");

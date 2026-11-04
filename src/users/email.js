@@ -603,7 +603,7 @@ const URGENCY = { normal: 'Normal', urgent: 'Urgent', machine_down: 'Machine sto
 const sendServiceRequestEmails = (r, hooks = {}) => {
   const c = r.contact || {};
   const isAmc = r.type === 'amc';
-  const what = isAmc ? 'AMC request' : 'service request';
+  const what = isAmc ? 'AMC request' : r.type === 'pcb' ? 'PCB repair request' : 'service request';
   const site = (process.env.FRONTEND_URL || 'https://www.foodpharmamachinery.com').replace(/\/$/, '');
   const facts = [
     ['Machine', [r.machine?.name, r.machine?.model].filter(Boolean).join(' · ')],

@@ -6,7 +6,7 @@ const STATUSES = ["open", "scheduled", "in_progress", "resolved", "closed"];
 const serviceRequestSchema = new mongoose.Schema(
   {
     number: { type: String, required: true, unique: true, index: true }, // SR-20261023-0042
-    type: { type: String, enum: ["service", "amc"], default: "service", index: true },
+    type: { type: String, enum: ["service", "amc", "pcb"], default: "service", index: true },
     userId: { type: String, default: null, index: true }, // set when logged in
     contact: {
       name: { type: String, required: true, trim: true, maxlength: 100 },
