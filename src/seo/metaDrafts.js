@@ -57,7 +57,7 @@ const factsOf = (p) => [
 ].filter(Boolean).join("\n");
 
 // What the machine is, without photo/video credits or test notes left in some descriptions
-const about = (p) => (plain(p.description).match(/[^.!?]+[.!?]+/g) || [plain(p.description)])
+const about = (p) => (plain(p.description).match(/.+?[.!?]+(?=\s|$)/g) || [plain(p.description)])
   .filter((s) => !/video:|photo:|cc by|wikimedia|shown to test|demo|not for sale/i.test(s)).slice(0, 2).join(" ").trim();
 
 // The short version the model writes from (all facts make it list everything, price included);
@@ -108,22 +108,16 @@ const checkDraft = (raw, p) => {
 const SYSTEM = "You write Google search descriptions for machines sold by Food Pharma Machinery (Haridwar, India). " +
   "Write ONE sentence of 110 to 155 characters that says what the machine is and what it does, using only the facts given. " +
   "No prices, no phone numbers, no links, no brand or company names, no claims like best or leading. Reply with the sentence only.";
-// Two worked examples (machines we don't list), so the model copies the form, not the facts
-const EXAMPLES = [
-  ["Machine: Ribbon Blender – 500 L\nCategory: mixing\nSpecifications: Working capacity: 500 L; Contact parts: SS 316\nAbout: Horizontal ribbon blender for uniform mixing of dry powders and granules in food and pharma plants.",
-    "Ribbon blender with 500 L working capacity and SS 316 contact parts for uniform mixing of dry powders and granules in food and pharma plants."],
-  ["Machine: Automatic Sticker Labelling Machine\nCategory: labeling\nSpecifications: Speed: Up to 120 bottles/min\nAbout: Wrap-around labelling of round bottles and jars with batch coding.",
-    "Automatic sticker labelling machine for wrap-around labels on round bottles and jars, up to 120 bottles/min, with batch coding."],
-];
 
 const askModel = async (facts) => {
   const base = (process.env.LLM_BASE_URL || "http://127.0.0.1:8090/v1").replace(/\/$/, "");
-  const messages = [{ role: "system", content: SYSTEM }, ...EXAMPLES.flatMap(([q, a]) => [{ role: "user", content: q }, { role: "assistant", content: a }]), { role: "user", content: facts }];
+  const messages = [{ role: "system", content: SYSTEM }, { role: "user", content: facts }];
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // lora scale 0: the plain base model for this request (our chat training makes it chat)
-    body: JSON.stringify({ model: process.env.LLM_MODEL || "foodpharma", lora: [{ id: 0, scale: 0 }], messages, max_tokens: 90, temperature: 0.4 }),
+    // This request only: chat training off (adapter 0), SEO training on (adapter 1, see start.sh).
+    // SYSTEM must match llm-training/export_seo_dataset.cjs, which the SEO training learned from.
+    body: JSON.stringify({ model: process.env.LLM_MODEL || "foodpharma", lora: [{ id: 0, scale: 0 }, { id: 1, scale: 1 }], messages, max_tokens: 90, temperature: 0.4 }),
     signal: AbortSignal.timeout(60000),
   });
   if (!res.ok) throw new Error(`model answered ${res.status}`);
